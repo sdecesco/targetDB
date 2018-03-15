@@ -22,7 +22,6 @@ from intermine.errors import ServiceError, WebserviceError
 from druggability3 import pocket_finder as pocket
 from druggability3 import db_connection as db
 from druggability3 import pdb_parser
-from druggability3 import drugg_errors
 from protein_atlas_api import proteinatlas as patlas
 from Bio.Seq import Seq
 from Bio import pairwise2
@@ -32,6 +31,7 @@ from Bio.Blast import NCBIXML
 import pandas as pd
 import numpy as np
 from druggability3 import cns_mpo as mpo
+from druggability3 import drugg_errors
 
 # ===================# SETTING UP PATHS #============================#
 
