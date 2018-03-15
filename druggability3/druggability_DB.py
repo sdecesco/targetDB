@@ -22,7 +22,7 @@ from intermine.errors import ServiceError, WebserviceError
 from druggability3 import pocket_finder as pocket
 from druggability3 import db_connection as db
 from druggability3 import pdb_parser
-# from druggability3 import drugg_errors
+from druggability3 import drugg_errors
 from protein_atlas_api import proteinatlas as patlas
 from Bio.Seq import Seq
 from Bio import pairwise2
