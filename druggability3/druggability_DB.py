@@ -22,7 +22,6 @@ from intermine.errors import ServiceError, WebserviceError
 from druggability3 import pocket_finder as pocket
 from druggability3 import db_connection as db
 from druggability3 import pdb_parser
-# from druggability3 import drugg_errors
 from protein_atlas_api import proteinatlas as patlas
 from Bio.Seq import Seq
 from Bio import pairwise2
@@ -196,9 +195,9 @@ def get_crossref_pdb_go(record):
             CrossRef[ref[0]] = ref[3].split('.')[0]
         else:
             CrossRef[ref[0]] = ref[1]
-    # CrossRef['PDB'] = PDB_list
-    # CrossRef['GO'] = {'P': GO_process, 'F': GO_Function, 'C': GO_Component}
-    return CrossRef,PDB_list,{'P': GO_process, 'F': GO_Function, 'C': GO_Component}
+    CrossRef['PDB'] = PDB_list
+    CrossRef['GO'] = {'P': GO_process, 'F': GO_Function, 'C': GO_Component}
+    return CrossRef
 
 
 @retryer(max_retries=10, timeout=10)
@@ -257,6 +256,7 @@ def get_humanmine_data(gene):
         "atlasExpression.expression"
     )
     query.add_constraint("id", "=", primary_id, code="A")
+    # query.add_constraint("id", "=", "1276523", code="A") #USED FOR CODING PURPOSES
     query.add_constraint("atlasExpression.type", "!=", "FPKM value", code="B")
     query.add_constraint("atlasExpression.expression", "!=", "NONDE", code="C")
     for row in query.rows():
@@ -298,18 +298,10 @@ def get_humanmine_data(gene):
     return disease, phenotypes, differential_exp_diseases, differential_exp_tissues, gwas, pathways
 
 
-def get_domains(record=None,gene_id=None,chembl_id=None):
+def get_domains(feature_record, crossref):
     # ------------ domain and binding sites ----------#
     domain = []
-    if not record:
-        if gene_id:
-            record=get_uniprot(gene_id)
-            if record is None:
-                return None
-        else:
-            raise drugg_errors.ArgumentError
-
-    for feature in record.features:
+    for feature in feature_record.features:
         if feature[0] == 'DOMAIN':
             start = feature[1]
             finish = feature[2]
@@ -318,20 +310,20 @@ def get_domains(record=None,gene_id=None,chembl_id=None):
             while not str(finish)[0].isdigit():
                 finish = str(finish)[1:]
             domain_name = str(feature[3]).split('.')[0]
-            domain_id = str(record.accessions[0]) + str(start) + str(finish) + '_uniprot'
+            domain_id = str(feature_record.accessions[0]) + str(start) + str(finish) + '_uniprot'
             domain.append(
                 {'Start': int(start), 'Stop': int(finish), 'name': domain_name, 'length': int(finish) - int(start),
                  'domain_id': domain_id, 'source_name': 'Uniprot', 'Source_id': 'n.a.'})
-    if chembl_id:
+    if 'ChEMBL' in crossref:
         dbase = db.open_db(chembL_db_version, pwd=args.db_password, user=args.db_username)
         query = "SELECT CD.start_position,CD.end_position,DOM.domain_name,DOM.source_domain_id,DOM.domain_type FROM target_dictionary " \
                 "TD,target_components TC,domains DOM,component_domains CD WHERE TD.chembl_id='%s' AND TD.tid=TC.tid AND " \
                 "TC.component_id=CD.component_id AND DOM.domain_id=CD.domain_id GROUP BY TD.chembl_id,CD.domain_id" % \
-                chembl_id
+                crossref['ChEMBL']
         domains = dbase.get(query)
         dbase.close()
         for i in domains:
-            domain_id = str(record.accessions[0]) + str(i['start_position']) + str(i['end_position']) + '_' + i[
+            domain_id = str(feature_record.accessions[0]) + str(i['start_position']) + str(i['end_position']) + '_' + i[
                 'source_domain_id']
             domain.append({'Start': int(i['start_position']), 'Stop': int(i['end_position']), 'name': i['domain_name'],
                            'length': int(i['end_position']) - int(i['start_position']),
@@ -2557,7 +2549,7 @@ class Target:
 
             # ===========# GET ALL THE CROSSREFERENCES (source: Uniprot)#==============#
 
-            self.CrossRef,pdb,go = get_crossref_pdb_go(self.record)
+            self.CrossRef = get_crossref_pdb_go(self.record)
 
             # ===========# GET PROTEIN EXPRESSION LEVELS (source: ProteinAtlas)#==============#
 
@@ -2575,7 +2567,6 @@ class Target:
                 self.protein_expression = None
 
             # ===========# IF THE ENTRY WASN'T IN THE DB IT WILL RUN #==============#
-            self.do_info=True
             if self.do_info:
 
                 # ===========# GET INFO FROM HUMANMINE.ORG (disease, phenotypes, differential_exp_diseases, differential_exp_tissues, gwas,pathways) #=============#
@@ -2585,7 +2576,7 @@ class Target:
 
                 # ==========# GET DOMAIN INFORMATION FROM BOTH CHEMBL AND UNIPROT #===========#
 
-                self.domain = get_domains(record=self.record)
+                self.domain = get_domains(self.record, self.CrossRef)
 
                 # ==========# GET PROTEIN CLASS AND SYNONYMS FROM CHEMBL #===========#
 
