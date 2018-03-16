@@ -22,17 +22,6 @@ from intermine.errors import ServiceError, WebserviceError
 from druggability3 import pocket_finder as pocket
 from druggability3 import db_connection as db
 from druggability3 import pdb_parser
-<<<<<<< Updated upstream
-=======
-<<<<<<< Updated upstream
-# from druggability3 import drugg_errors
-=======
-<<<<<<< HEAD
-from druggability3 import drugg_errors
-=======
->>>>>>> parent of cc8fa8a... errors file
->>>>>>> Stashed changes
->>>>>>> Stashed changes
 from protein_atlas_api import proteinatlas as patlas
 from Bio.Seq import Seq
 from Bio import pairwise2
