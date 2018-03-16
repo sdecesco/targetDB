@@ -307,6 +307,7 @@ def get_domains(record=None,gene_id=None,chembl_id=None):
             if record is None:
                 return None
         else:
+            print("[ArgumentError]: Combination of arguments is invalid")
             raise drugg_errors.ArgumentError
 
     for feature in record.features:
