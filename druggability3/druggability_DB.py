@@ -152,7 +152,7 @@ def get_uniprot(gene_id):
     return record
 
 
-def get_crossref_pdb_go(record):
+def get_crossref_pdb_go_chembl(record):
     # ------------Cross references----------# cross_references contains all the ID number of multiple database such
     # as PDB, CHEMBL, GO, etc... It data structure is composed of a list of tuples, each tuple starting with the
     # database prefix We want to store all the references, sometime one ref (e.g. PDB) contains multiple entries,
@@ -160,6 +160,7 @@ def get_crossref_pdb_go(record):
     # 'CODE1','CODE2',...],'GO':{'GO:0006954':'P:inflammatory response','GO:XXXXXX':'C:LocationBlabla'}}
     CrossRef = {}
     PDB_list = {}
+    chembl_id = None
     GO_process = []
     GO_Function = []
     GO_Component = []
@@ -194,11 +195,13 @@ def get_crossref_pdb_go(record):
             if ref[0] in CrossRef.keys():
                 continue
             CrossRef[ref[0]] = ref[3].split('.')[0]
+        elif ref[0] == 'ChEMBL':
+            chembl_id = ref[1]
         else:
             CrossRef[ref[0]] = ref[1]
-    # CrossRef['PDB'] = PDB_list
+    # pdb = PDB_list
     # CrossRef['GO'] = {'P': GO_process, 'F': GO_Function, 'C': GO_Component}
-    return CrossRef,PDB_list,{'P': GO_process, 'F': GO_Function, 'C': GO_Component}
+    return CrossRef, PDB_list, {'P': GO_process, 'F': GO_Function, 'C': GO_Component}, chembl_id
 
 
 @retryer(max_retries=10, timeout=10)
@@ -298,12 +301,12 @@ def get_humanmine_data(gene):
     return disease, phenotypes, differential_exp_diseases, differential_exp_tissues, gwas, pathways
 
 
-def get_domains(record=None,gene_id=None,chembl_id=None):
+def get_domains(record=None, gene_id=None, chembl_id=None):
     # ------------ domain and binding sites ----------#
     domain = []
     if not record:
         if gene_id:
-            record=get_uniprot(gene_id)
+            record = get_uniprot(gene_id)
             if record is None:
                 return None
         else:
@@ -351,20 +354,17 @@ def get_domains(record=None,gene_id=None,chembl_id=None):
     return domain
 
 
-def get_chembl_info(crossref):
-    if 'ChEMBL' in crossref:
-        dbase = db.open_db(chembL_db_version, pwd=args.db_password, user=args.db_username)
-        query = "SELECT PC.pref_name ,PC.short_name ,PC.protein_class_desc ,group_concat(DISTINCT(" \
-                "CSYN.component_synonym)) AS Synonym FROM target_dictionary TD, target_components TC, " \
-                "component_sequences CS, component_class CC, protein_classification PC, " \
-                "component_synonyms CSYN WHERE TD.chembl_id='%s' AND TD.tid=TC.tid AND " \
-                "TC.component_id=CS.component_id AND TC.component_id=CC.component_id AND " \
-                "TC.component_id=CSYN.component_id AND CC.protein_class_id=PC.protein_class_id GROUP BY " \
-                "TD.chembl_id" % crossref['ChEMBL']
-        entry_info = dbase.get(query)
-        dbase.close()
-    else:
-        return None
+def get_chembl_info(chembl_id):
+    dbase = db.open_db(chembL_db_version, pwd=args.db_password, user=args.db_username)
+    query = "SELECT PC.pref_name ,PC.short_name ,PC.protein_class_desc ,group_concat(DISTINCT(" \
+            "CSYN.component_synonym)) AS Synonym FROM target_dictionary TD, target_components TC, " \
+            "component_sequences CS, component_class CC, protein_classification PC, " \
+            "component_synonyms CSYN WHERE TD.chembl_id='%s' AND TD.tid=TC.tid AND " \
+            "TC.component_id=CS.component_id AND TC.component_id=CC.component_id AND " \
+            "TC.component_id=CSYN.component_id AND CC.protein_class_id=PC.protein_class_id GROUP BY " \
+            "TD.chembl_id" % chembl_id
+    entry_info = dbase.get(query)
+    dbase.close()
     return entry_info
 
 
@@ -554,20 +554,20 @@ def get_pdb(list_of_pdb, path):
     return file_path
 
 
-def get_pdb_seq_info(crossref, domain, isoforms):
+def get_pdb_seq_info(pdb_list, domain, isoforms):
     if args.verbose:
         print("[PDB INFO]: Extracting PDB information")
-    for keys in crossref['PDB'].keys():
-        if 'path' not in crossref['PDB'][keys].keys():
-            crossref['PDB'][keys]['length'] = 0
-            crossref['PDB'][keys]['Domain'] = 'no_domain'
-            crossref['PDB'][keys]['sequences'] = {}
+    for keys in pdb_list.keys():
+        if 'path' not in pdb_list[keys].keys():
+            pdb_list[keys]['length'] = 0
+            pdb_list[keys]['Domain'] = 'no_domain'
+            pdb_list[keys]['sequences'] = {}
             continue
-        seq = pdb_parser.get_sequence(keys, crossref['PDB'][keys]['path'],
-                                      crossref['PDB'][keys]['Chain'], domain)
+        seq = pdb_parser.get_sequence(keys, pdb_list[keys]['path'],
+                                      pdb_list[keys]['Chain'], domain)
         chain_done = []
         for chain in seq.keys():
-            if seq[chain]['chain_name'] not in crossref['PDB'][keys]['Chain']:
+            if seq[chain]['chain_name'] not in pdb_list[keys]['Chain']:
                 continue
             for i in seq[chain]['equal']:
                 if i in chain_done:
@@ -593,16 +593,16 @@ def get_pdb_seq_info(crossref, domain, isoforms):
                         isoform_match.append({'isoform': item[1], 'identity': item[0]['identity']})
                 seq[chain]['aligned'] = isoform_match
                 chain_done.append(chain)
-        crossref['PDB'][keys]['sequences'] = seq
+        pdb_list[keys]['sequences'] = seq
         length = 0
         for chain in seq.keys():
             if seq[chain]['length'] > length:
                 length = seq[chain]['length']
             for c in seq[chain]['domain']:
-                crossref['PDB'][keys]['Domain'].append(c)
+                pdb_list[keys]['Domain'].append(c)
 
-        crossref['PDB'][keys]['Domain'] = list(set(crossref['PDB'][keys]['Domain']))
-        crossref['PDB'][keys]['length'] = length
+        pdb_list[keys]['Domain'] = list(set(pdb_list[keys]['Domain']))
+        pdb_list[keys]['length'] = length
     if args.verbose:
         print("[PDB INFO]: Done")
 
@@ -782,17 +782,13 @@ def pdb_blast(sequence, path, gene_id, gene='', pdb_list=[]):
                 print("[3D BLAST][ERROR]: Something went wrong, no blast result generated")
                 return alternate_pdb
     else:
-        # result_handle2 = NCBIWWW.qblast("blastp", "pdb", sequence)
         blast_launcher(sequence, seq_file, 'pdbaa', blast_file, num_core=args.num_core)
         if os.path.isfile(blast_file):
             result_handle = open(blast_file)
         else:
             print("[3D BLAST][ERROR]: Something went wrong, no blast result generated")
             return alternate_pdb
-            # save_file = open(blast_file+'2', 'w')
-            # save_file.write(result_handle2.read())
-            # save_file.close()
-            # result_handle = open(blast_file)
+
     if args.verbose:
         print('[3D BLAST DONE]: Now parsing the data - ' + gene + '(' + gene_id + ')')
     blast_record = NCBIXML.read(result_handle)
@@ -934,15 +930,15 @@ def write_to_db(target, db_name):
     # ========# FILLING THE TARGETS TABLE #=========#
     if not target.target_in:
         location = ""
-        for item in target.CrossRef['GO']['C']:
+        for item in target.go['C']:
             location += str(item) + " / "
         location = location.rstrip('/')
         function = ""
-        for item in target.CrossRef['GO']['F']:
+        for item in target.go['F']:
             function += str(item) + '/'
         function = function.rstrip('/')
         process = ""
-        for item in target.CrossRef['GO']['P']:
+        for item in target.go['P']:
             process += str(item) + " / "
         process = process.rstrip('/')
 
@@ -950,9 +946,9 @@ def write_to_db(target, db_name):
             target.swissprotID, target.gene, target.record.organism, target.record.taxonomy_id[0], target.sequence,
             location, process,
             function, str(len(target.variants)), target.synonyms, target.ProteinClass['Class_name'],
-            target.ProteinClass['Class_description'], target.ProteinClass['Class_short'])]
+            target.ProteinClass['Class_description'], target.ProteinClass['Class_short'], target.chembl_id)]
         dbase.multi_write("""INSERT INTO Targets(Target_id, Gene_name, Species, species_id, Sequence, Cell_location,
-        Process, Function, Number_isoforms, Synonyms, Protein_class, Protein_class_desc, Protein_class_short)""",
+        Process, Function, Number_isoforms, Synonyms, Protein_class, Protein_class_desc, Protein_class_short,chembl_id)""",
                           values, update="ON DUPLICATE KEY UPDATE Gene_name=VALUES(Gene_name),Species=VALUES(Species),"
                                          "species_id=VALUES(species_id),Sequence=VALUES(Sequence),Cell_location=VALUES("
                                          "Cell_location),Process=VALUES(Process),Function=VALUES("
@@ -1068,37 +1064,37 @@ def write_to_db(target, db_name):
 
     # ========# FILLING THE PDB RELATED TABLES #=========#
 
-    if target.CrossRef['PDB']:
+    if target.pdb:
         values_PDB = []
         values_PDBChains = []
         values_PDBChains_iso = []
         values_PDBChains_equal = []
         values_PDBChains_dom = []
-        for key in target.CrossRef['PDB'].keys():
+        for key in target.pdb.keys():
             chain_done = []
-            values_PDB.append((target.CrossRef['PDB'][key]['PDB_code'], target.CrossRef['PDB'][key]['Technique'],
-                               target.CrossRef['PDB'][key]['Resolution']))
-            for chain in target.CrossRef['PDB'][key]['sequences'].keys():
+            values_PDB.append((target.pdb[key]['PDB_code'], target.pdb[key]['Technique'],
+                               target.pdb[key]['Resolution']))
+            for chain in target.pdb[key]['sequences'].keys():
                 start_stop = ''
-                for i in target.CrossRef['PDB'][key]['sequences'][chain]['start_stop_pairs']:
+                for i in target.pdb[key]['sequences'][chain]['start_stop_pairs']:
                     start_stop += str(i[0]) + '-' + str(i[1]) + ' | '
                 start_stop = start_stop.rstrip(' | ')
                 values_PDBChains.append((str(key) + '_' + str(chain), key, chain,
-                                         target.CrossRef['PDB'][key]['sequences'][chain]['sequence'],
+                                         target.pdb[key]['sequences'][chain]['sequence'],
                                          target.swissprotID,
-                                         target.CrossRef['PDB'][key]['sequences'][chain]['start'],
-                                         target.CrossRef['PDB'][key]['sequences'][chain]['stop'],
-                                         target.CrossRef['PDB'][key]['sequences'][chain]['length'], start_stop))
-                if target.CrossRef['PDB'][key]['sequences'][chain]['equal']:
-                    for eq in target.CrossRef['PDB'][key]['sequences'][chain]['equal']:
+                                         target.pdb[key]['sequences'][chain]['start'],
+                                         target.pdb[key]['sequences'][chain]['stop'],
+                                         target.pdb[key]['sequences'][chain]['length'], start_stop))
+                if target.pdb[key]['sequences'][chain]['equal']:
+                    for eq in target.pdb[key]['sequences'][chain]['equal']:
                         if eq not in chain_done:
                             values_PDBChains_equal.append((str(key) + '_' + str(chain), str(key) + '_' + str(eq)))
                     chain_done.append(chain)
-                if target.CrossRef['PDB'][key]['sequences'][chain]['aligned']:
-                    for iso in target.CrossRef['PDB'][key]['sequences'][chain]['aligned']:
+                if target.pdb[key]['sequences'][chain]['aligned']:
+                    for iso in target.pdb[key]['sequences'][chain]['aligned']:
                         values_PDBChains_iso.append((str(key) + '_' + str(chain), iso['isoform'], iso['identity']))
-                if 'no_domain' not in target.CrossRef['PDB'][key]['sequences'][chain]['domain']:
-                    for dom_id in target.CrossRef['PDB'][key]['sequences'][chain]['domain_id']:
+                if 'no_domain' not in target.pdb[key]['sequences'][chain]['domain']:
+                    for dom_id in target.pdb[key]['sequences'][chain]['domain_id']:
                         values_PDBChains_dom.append((str(key) + '_' + str(chain), dom_id))
 
         dbase.multi_write("INSERT INTO PDB(PDB_code, Technique, Resolution)", values_PDB,
@@ -1291,10 +1287,10 @@ def write_to_db(target, db_name):
     # ========# FILLING THE CROSSREF TABLE #=========#
     # Only ChemblID at the moment
 
-    if 'ChEMBL' in target.CrossRef.keys():
+    if target.chembl_id:
         value = []
         value.append(
-            (target.swissprotID, target.CrossRef['ChEMBL'], target.swissprotID + '_' + target.CrossRef['ChEMBL']))
+            (target.swissprotID, target.chembl_id, target.swissprotID + '_' + target.chembl_id))
         dbase.multi_write("INSERT INTO Crossref(target_id,Chembl_id,unique_id)", value,
                           update="ON DUPLICATE KEY UPDATE date=CURRENT_TIMESTAMP")
         if args.verbose:
@@ -1341,8 +1337,7 @@ def get_single_excel(target_id):
         wb_var_mut = workbook.add_worksheet('variants_mutants')
         writer.sheets['variants_mutants'] = wb_var_mut
         wb_struct = workbook.add_worksheet('Structure')
-        writer.sheets['Structure']=wb_struct
-
+        writer.sheets['Structure'] = wb_struct
 
         dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
         query = "SELECT * FROM Targets WHERE Target_id='" + target_id + "'"
@@ -1831,21 +1826,21 @@ GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % targ
         row = 0
         col_orig = 0
         if sequence:
-            wb_struct.merge_range(row, col_orig, row, col_orig+4, 'Total length', col_header)
+            wb_struct.merge_range(row, col_orig, row, col_orig + 4, 'Total length', col_header)
             row += 1
-            wb_struct.merge_range(row, col_orig, row, col_orig+4, len(sequence), bold_center)
+            wb_struct.merge_range(row, col_orig, row, col_orig + 4, len(sequence), bold_center)
             row += 2
         if res_domains:
-            wb_struct.merge_range(row, col_orig, row, col_orig+4, 'DOMAINS', col_header)
+            wb_struct.merge_range(row, col_orig, row, col_orig + 4, 'DOMAINS', col_header)
             row += 1
             dom = pd.DataFrame.from_records(res_domains)
             col_order = ['Domain_name', 'start', 'stop', 'length', 'source']
             dom = dom[col_order]
-            dom.to_excel(writer,sheet_name='Structure',startrow=row,index=False)
-            row+= len(dom)+1
+            dom.to_excel(writer, sheet_name='Structure', startrow=row, index=False)
+            row += len(dom) + 1
 
         if res_pdb_blast:
-            wb_struct.merge_range(row, col_orig, row, col_orig+4, 'PDB BLAST', col_header)
+            wb_struct.merge_range(row, col_orig, row, col_orig + 4, 'PDB BLAST', col_header)
             row += 1
             blast = pd.DataFrame.from_records(res_pdb_blast)
             col_order = ['PDB_code', 'Chain', 'similarity', 'gene', 'species']
@@ -1858,11 +1853,11 @@ GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % targ
             row += 1
 
             pdb = pd.DataFrame.from_records(res_pdb)
-            pdb['% of full protein'] = round((pdb['n_residues']/len(sequence))*100,1)
+            pdb['% of full protein'] = round((pdb['n_residues'] / len(sequence)) * 100, 1)
             col_order = ['PDB_code', 'Technique', 'Resolution', 'Chain', 'Domain_name',
-                         'n_residues', '% of full protein','start_stop']
-            pdb=pdb[col_order]
-            pdb.to_excel(writer, sheet_name='Structure', startrow=row,startcol=col_orig, index=False)
+                         'n_residues', '% of full protein', 'start_stop']
+            pdb = pdb[col_order]
+            pdb.to_excel(writer, sheet_name='Structure', startrow=row, startcol=col_orig, index=False)
 
         dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
         query_pockets = """SELECT
@@ -1913,7 +1908,7 @@ ORDER BY B.similarity DESC""" % target_id
             col_order = ['PDB_code', 'druggability_score', 'pocket_score', 'pocket_number',
                          'volume', 'area', 'fraction_apolar', 'domains']
             pock = pock[col_order]
-            pock.to_excel(writer,sheet_name='Pockets',startrow=1,index=False)
+            pock.to_excel(writer, sheet_name='Pockets', startrow=1, index=False)
             wb_pockets = writer.sheets['Pockets']
             wb_pockets.merge_range(0, 0, 0, 7, 'DRUGGABLE POCKETS', col_header)
 
@@ -1922,7 +1917,7 @@ ORDER BY B.similarity DESC""" % target_id
             col_order = ['PDB_code', 'druggability_score', 'pocket_score', 'pocket_number',
                          'volume', 'area', 'fraction_apolar', 'gene', 'species', 'similarity']
             alt_pock = alt_pock[col_order]
-            alt_pock.to_excel(writer,sheet_name='Pockets',startrow=1,index=False,startcol=col_alt_pocket)
+            alt_pock.to_excel(writer, sheet_name='Pockets', startrow=1, index=False, startcol=col_alt_pocket)
             wb_pockets = writer.sheets['Pockets']
             wb_pockets.merge_range(0, 0 + col_alt_pocket, 0, 9 + col_alt_pocket,
                                    'ALTERNATE DRUGGABLE POCKETS (PDB from blast)', col_header)
@@ -2558,7 +2553,7 @@ class Target:
 
             # ===========# GET ALL THE CROSSREFERENCES (source: Uniprot)#==============#
 
-            self.CrossRef,pdb,go = get_crossref_pdb_go(self.record)
+            self.CrossRef, self.pdb, self.go, self.chembl_id = get_crossref_pdb_go_chembl(self.record)
 
             # ===========# GET PROTEIN EXPRESSION LEVELS (source: ProteinAtlas)#==============#
 
@@ -2576,7 +2571,7 @@ class Target:
                 self.protein_expression = None
 
             # ===========# IF THE ENTRY WASN'T IN THE DB IT WILL RUN #==============#
-            self.do_info=True
+
             if self.do_info:
 
                 # ===========# GET INFO FROM HUMANMINE.ORG (disease, phenotypes, differential_exp_diseases, differential_exp_tissues, gwas,pathways) #=============#
@@ -2586,11 +2581,11 @@ class Target:
 
                 # ==========# GET DOMAIN INFORMATION FROM BOTH CHEMBL AND UNIPROT #===========#
 
-                self.domain = get_domains(record=self.record)
+                self.domain = get_domains(record=self.record, chembl_id=self.chembl_id)
 
                 # ==========# GET PROTEIN CLASS AND SYNONYMS FROM CHEMBL #===========#
 
-                self.prot_info = get_chembl_info(self.CrossRef)
+                self.prot_info = get_chembl_info(self.chembl_id)
                 if self.prot_info:
                     desc = str(self.prot_info[0]['protein_class_desc']).replace('  ', ' -> ')
                     self.ProteinClass = {'Class_name': self.prot_info[0]['pref_name'], 'Class_description': desc,
@@ -2631,25 +2626,25 @@ class Target:
             dbase.close()
             list_pdb = [i['PDB_code'] for i in res_pdb]
             # =============# REMOVING PDB CODE FROM CrossRef if already done #============#
-            if self.CrossRef['PDB']:
-                [self.CrossRef['PDB'].pop(key) for key in list_pdb]
+            if self.pdb:
+                [self.pdb.pop(key) for key in list_pdb]
 
-            if self.CrossRef['PDB']:
+            if self.pdb:
                 # ========================# DOWNLOADING THE PDBs #============================#
 
-                get_pdb(self.CrossRef['PDB'], self.path)
+                get_pdb(self.pdb, self.path)
 
                 # ========================# GET PDB SEQUENCE INFO #===========================#
 
-                get_pdb_seq_info(self.CrossRef, self.domain, self.variants)
+                get_pdb_seq_info(self.pdb, self.domain, self.variants)
 
                 # =====================# GET POCKETS (source: fpockets) ======================#
 
                 self.pockets = pocket.get_pockets(self.path, sphere_size=args.sphere_size,
-                                                  pdb_info=self.CrossRef['PDB'], domain=self.domain,
+                                                  pdb_info=self.pdb, domain=self.domain,
                                                   uniprot_id=self.swissprotID)
                 self.druggable_pockets = pocket.get_druggable_pockets(self.pockets)
-            pdb_super_list = list_pdb + list(self.CrossRef['PDB'].keys())
+            pdb_super_list = list_pdb + list(self.pdb.keys())
 
             # ============================================================================#
             # ======================# END OF THE PDB SECTION #============================#
@@ -2659,15 +2654,15 @@ class Target:
             # ====================# START OF THE LIGAND SECTION #=========================#
             # ============================================================================#
 
-            if 'ChEMBL' in self.CrossRef:
+            if self.chembl_id:
 
                 # ===# GET LIST OF ASSAYS ASSOCIATED TO THE TARGET #=========#
 
-                self.assay = get_assays(self.CrossRef['ChEMBL'])
+                self.assay = get_assays(self.chembl_id)
 
                 # ==============# GET LIST OF LIGAND TO ADD #================#
 
-                ligands_to_do = get_ligands_to_do(self.CrossRef['ChEMBL'])
+                ligands_to_do = get_ligands_to_do(self.chembl_id)
 
                 if len(ligands_to_do) != 0:
                     # ========# GET ALL BIOACTIVITIES OF THESE LIGANDS #=========#
