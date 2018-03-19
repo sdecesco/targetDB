@@ -1300,7 +1300,7 @@ def write_to_db(target, db_name):
 
 
 def get_single_excel(target_id):
-    if target_id in list_of_entries.values():
+    if target_id in list_of_entries:
         writer = pd.ExcelWriter(output_single_path + target_id + '_' + list_of_entries[target_id] + '.xlsx',
                                 engine='xlsxwriter')
 
@@ -2817,4 +2817,4 @@ if __name__ == "__main__":
             if args.report_single:
                 for key in targets_list:
                     if targets_list[key] == 'Target completed' or targets_list[key] == 'Already present':
-                        get_single_excel(key)
+                        get_single_excel(gene_dict[key])
