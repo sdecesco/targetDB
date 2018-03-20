@@ -15,7 +15,7 @@ except NameError:
     pass
 
 import sys, os, mygene, requests, xlsxwriter, subprocess, re
-from Bio import ExPASy
+from Bio import ExPASy, Entrez, Medline
 from Bio import SwissProt
 from intermine.webservice import Service
 from intermine.errors import ServiceError, WebserviceError
@@ -918,6 +918,98 @@ def proteins_blast(sequence, gene_id, gene, path):
     return list_of_neighbours
 
 
+def pubmed_search(gene_id, email):
+    dict_medline = {"AB": "Abstract", "CI": "Copyright Information", "AD": "Affiliation", "AUID": "Author ID",
+                    "IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
+                    "FAU": "Full Author", "CN": "Corporate Author", "DCOM": "Date Completed", "DA": "Date Created",
+                    "LR": "Date Last Revised", "DEP": "Date of Electronic Publication", "DP": "Date of Publication",
+                    "EDAT": "Entrez Date", "GS": "Gene Symbol", "GN": "General Note", "GR": "Grant Number",
+                    "IR": "Investigator Name", "FIR": "Full Investigator Name", "IS": "ISSN", "IP": "Issue",
+                    "TA": "Journal Title Abbreviation", "JT": "Journal Title", "LA": "Language",
+                    "LID": "Location Identifier", "MID": "Manuscript Identifier", "MHDA": "MeSH Date",
+                    "MH": "MeSH Terms", "JID": "NLM Unique ID", "RF": "Number of References", "OAB": "Other Abstract",
+                    "OCI": "Other Copyright Information", "OID": "Other ID", "OT": "Other Term",
+                    "OTO": "Other Term Owner", "OWN": "Owner", "PG": "Pagination", "PS": "Personal Name as Subject",
+                    "FPS": "Full Personal Name as Subject", "PL": "Place of Publication",
+                    "PHST": "Publication History Status", "PST": "Publication Status", "PT": "Publication Type",
+                    "PUBM": "Publishing Model", "PMC": "PubMed Central Identifier", "PMID": "PMID",
+                    "RN": "Registry Number/EC Number", "NM": "Substance Name", "SI": "Secondary Source ID",
+                    "SO": "Source", "SFM": "Space Flight Mission", "STAT": "Status", "SB": "Subset", "TI": "Title",
+                    "TT": "Transliterated Title", "VI": "Volume", "CON": "Comment on", "CIN": "Comment in",
+                    "EIN": "Erratum in", "EFR": "Erratum for", "CRI": "Corrected and Republished in",
+                    "CRF": "Corrected and Republished from", "PRIN": "Partial retraction in",
+                    "PROF": "Partial retraction of", "RPI": "Republished in", "RPF": "Republished from",
+                    "RIN": "Retraction in", "ROF": "Retraction of", "UIN": "Update in", "UOF": "Update of",
+                    "SPIN": "Summary for patients in", "ORI": "Original report in"}
+    pubmed_url = 'https://www.ncbi.nlm.nih.gov/pubmed/'
+
+    Entrez.email = email
+    protein_id = Entrez.esearch(db='protein', term=gene_id)
+    pid = Entrez.read(protein_id)
+    handle = Entrez.elink(db='pubmed', dbfrom="protein", id=pid['IdList'][0], linkname="protein_pubmed_weighted")
+    rec = Entrez.read(handle)
+    pub_id = [i['Id'] for i in rec[0]['LinkSetDb'][0]['Link']]
+    info_pub = Entrez.efetch(db='pubmed', id=pub_id, rettype='medline', retmode='text')
+    data = [i for i in Medline.parse(info_pub)]
+
+    df = pd.DataFrame.from_records(data)
+    df.rename(index=str, columns=dict_medline, inplace=True)
+    pub_type_list = ['Journal Article', 'Case Reports', 'Clinical Trial', 'Comparative Study', 'Letter',
+                     'Meta-Analysis', 'Review']
+    for pub_type in pub_type_list:
+        df[pub_type] = [pub_type in i for i in df['Publication Type'].values]
+    columns_to_keep = ['Abstract', 'Affiliation', 'Author', 'Date of Publication',
+                       'Journal Title','MeSH Terms', 'Other Term',
+                       'Other Term Owner', 'Place of Publication','PMID',
+                       'Registry Number/EC Number', 'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
+                       'Journal Article', 'Case Reports', 'Clinical Trial',
+                       'Comparative Study', 'Letter', 'Meta-Analysis', 'Review']
+    df = df[columns_to_keep]
+    n_entity = []
+    for i in df['Registry Number/EC Number'].values:
+        if type(i) == list:
+            n_entity.append(len(i))
+        else:
+            n_entity.append(0)
+    df['Number of entity'] = n_entity
+    df['Year of Publication'] = df['Date of Publication'].str.split(' ', expand=True)[0]
+
+    df['PMID'] = pubmed_url + df.PMID + '/'
+    neurodeg = []
+    chem = []
+    major_keywords = []
+    for i in df['MeSH Terms'].values:
+        if type(i) == float:
+            neurodeg.append(False)
+            chem.append(False)
+            major_keywords.append([])
+        else:
+            major = []
+            neuro = False
+            chemistry = False
+            for k in i:
+                if 'Neurodege' in k or 'Alzheimer' in k or 'Dementia' in k or 'Parkinson' in k:
+                    neuro = True
+                if '*' in k:
+                    major.append(k)
+                if '*chemistry' in k or '*Chemistry' in k:
+                    chemistry = True
+            major_keywords.append(major)
+            if neuro:
+                neurodeg.append(True)
+            else:
+                neurodeg.append(False)
+            if chemistry:
+                chem.append(True)
+            else:
+                chem.append(False)
+
+    df['Neurodegeneration'] = neurodeg
+    df['Major Keywords'] = major_keywords
+    df['Chemistry'] = chem
+    return df
+
+
 def write_to_db(target, db_name):
     if target.record is None:
         return None
@@ -1326,6 +1418,8 @@ def get_single_excel(target_id):
 
         wb_general_info = workbook.add_worksheet('General info')
         writer.sheets['General info'] = wb_general_info
+        wb_references = workbook.add_worksheet('References')
+        writer.sheets['References'] = wb_references
         wb_disease = workbook.add_worksheet('diseases')
         writer.sheets['diseases'] = wb_disease
         wb_expression = workbook.add_worksheet('expression')
@@ -1349,6 +1443,19 @@ def get_single_excel(target_id):
         res_reactome = dbase.get(query_reactome)
         res_kegg = dbase.get(query_kegg)
         dbase.close()
+
+        pubmed = None
+        if args.email:
+            pubmed = pubmed_search(target_id, args.email)
+        if not pubmed.empty:
+            col_order = ['Title', 'Journal Title','Year of Publication', 'Journal Article', 'Case Reports',
+                         'Clinical Trial', 'Comparative Study', 'Letter', 'Meta-Analysis', 'Review', 'Number of entity',
+                         'Neurodegeneration', 'Chemistry', 'Major Keywords','Abstract', 'Author', 'Affiliation',  'PMID',
+                         'Registry Number/EC Number',  'MeSH Terms', 'Other Term']
+            pubmed = pubmed[col_order]
+            pubmed.sort_values(by='Year of Publication',ascending=False,inplace=True)
+            pubmed.to_excel(writer, sheet_name='References', index=False)
+
 
         # GENERAL INFO HEADER
         header_index = {'Gene_name': (0, 0), 'Synonyms': (1, 0), 'Target_id': (2, 0), 'Protein_class': (3, 0),
@@ -2481,6 +2588,7 @@ class Target:
         self.assay = ''
         self.pockets = None
         self.record = None
+        self.pubmed = None
         self.pathways = []
         self.disease = []
         self.gwas = []
@@ -2747,6 +2855,9 @@ if __name__ == "__main__":
                         type=str)
     parser.add_argument('-db_user', '--db_username',
                         help='enter the username of your database', metavar='',
+                        type=str)
+    parser.add_argument('-email', '--email',
+                        help='enter your email address (required for the pubmed search', metavar='',
                         type=str)
     args = parser.parse_args()
 
