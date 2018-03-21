@@ -1011,6 +1011,39 @@ def pubmed_search(gene_name, email):
     return df
 
 
+@retryer(max_retries=10, timeout=10)
+def open_target_association(gene_id):
+    from opentargets import OpenTargetsClient
+    ot = OpenTargetsClient()
+    associations = ot.get_associations_for_target(gene_id)
+
+    df = associations.to_dataframe()
+    df = df[(df['is_direct'] == True)]
+    cols = ['target.gene_info.symbol', 'disease.efo_info.therapeutic_area.labels', 'disease.efo_info.label',
+            'association_score.overall',
+            'association_score.datatypes.genetic_association',
+            'association_score.datatypes.known_drug',
+            'association_score.datatypes.literature',
+            'association_score.datatypes.animal_model',
+            'association_score.datatypes.affected_pathway',
+            'association_score.datatypes.rna_expression',
+            'association_score.datatypes.somatic_mutation']
+    rename = {'association_score.datatypes.affected_pathway': 'affected_pathway',
+              'association_score.datatypes.animal_model': 'animal_model',
+              'association_score.datatypes.genetic_association': 'genetic_association',
+              'association_score.datatypes.known_drug': 'known_drug',
+              'association_score.datatypes.literature': 'litterature_mining',
+              'association_score.datatypes.rna_expression': 'rna_expression',
+              'association_score.datatypes.somatic_mutation': 'somatic_mutation',
+              'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
+              'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
+    df = df[cols]
+    df = df.round(2)
+    df = df[df['association_score.overall'] > 0.05]
+    df.rename(columns=rename, inplace=True)
+    return df
+
+
 def write_to_db(target, db_name):
     if target.record is None:
         return None
@@ -1423,6 +1456,8 @@ def get_single_excel(target_id):
         writer.sheets['References'] = wb_references
         wb_disease = workbook.add_worksheet('diseases')
         writer.sheets['diseases'] = wb_disease
+        wb_opentarget = workbook.add_worksheet('open_target_association')
+        writer.sheets['open_target_association'] = wb_opentarget
         wb_expression = workbook.add_worksheet('expression')
         writer.sheets['expression'] = wb_expression
         wb_genotypes = workbook.add_worksheet('genotypes')
@@ -1456,6 +1491,11 @@ def get_single_excel(target_id):
             pubmed = pubmed[col_order]
             pubmed.sort_values(by='Year of Publication',ascending=False,inplace=True)
             pubmed.to_excel(writer, sheet_name='References', index=False)
+
+        opentarget = open_target_association(target_id)
+        if not opentarget.empty:
+            opentarget.to_excel(writer,sheet_name='open_target_association',index=False)
+
 
 
         # GENERAL INFO HEADER
