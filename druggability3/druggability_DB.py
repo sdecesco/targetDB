@@ -918,7 +918,8 @@ def proteins_blast(sequence, gene_id, gene, path):
     return list_of_neighbours
 
 
-def pubmed_search(gene_id, email):
+@retryer(max_retries=10, timeout=10)
+def pubmed_search(gene_name, email):
     dict_medline = {"AB": "Abstract", "CI": "Copyright Information", "AD": "Affiliation", "AUID": "Author ID",
                     "IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
                     "FAU": "Full Author", "CN": "Corporate Author", "DCOM": "Date Completed", "DA": "Date Created",
@@ -944,12 +945,12 @@ def pubmed_search(gene_id, email):
     pubmed_url = 'https://www.ncbi.nlm.nih.gov/pubmed/'
 
     Entrez.email = email
-    protein_id = Entrez.esearch(db='protein', term=gene_id)
+    protein_id = Entrez.esearch(db='pubmed', term=gene_name,retmax=500)
     pid = Entrez.read(protein_id)
-    handle = Entrez.elink(db='pubmed', dbfrom="protein", id=pid['IdList'][0], linkname="protein_pubmed_weighted")
-    rec = Entrez.read(handle)
-    pub_id = [i['Id'] for i in rec[0]['LinkSetDb'][0]['Link']]
-    info_pub = Entrez.efetch(db='pubmed', id=pub_id, rettype='medline', retmode='text')
+    # handle = Entrez.elink(db='pubmed', dbfrom="gene", id=pid['IdList'][0], linkname="gene_pubmed")
+    # rec = Entrez.read(handle)
+    # pub_id = [i['Id'] for i in rec[0]['LinkSetDb'][0]['Link']]
+    info_pub = Entrez.efetch(db='pubmed', id=pid['IdList'], rettype='medline', retmode='text')
     data = [i for i in Medline.parse(info_pub)]
 
     df = pd.DataFrame.from_records(data)
@@ -1446,7 +1447,7 @@ def get_single_excel(target_id):
 
         pubmed = None
         if args.email:
-            pubmed = pubmed_search(target_id, args.email)
+            pubmed = pubmed_search(res_gen_info[0]['Gene_name'], args.email)
         if not pubmed.empty:
             col_order = ['Title', 'Journal Title','Year of Publication', 'Journal Article', 'Case Reports',
                          'Clinical Trial', 'Comparative Study', 'Letter', 'Meta-Analysis', 'Review', 'Number of entity',
