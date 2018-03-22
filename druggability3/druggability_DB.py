@@ -1473,9 +1473,10 @@ def get_single_excel(target_id):
         res_kegg = dbase.get(query_kegg)
         dbase.close()
 
-        pubmed = None
+        pubmed = pd.DataFrame(data=None)
         if args.email:
-            pubmed = pubmed_search(res_gen_info[0]['Gene_name'], args.email)
+            if res_gen_info:
+                pubmed = pubmed_search(res_gen_info[0]['Gene_name'], args.email)
         if not pubmed.empty:
             col_order = ['Title', 'Journal Title','Year of Publication', 'Journal Article', 'Case Reports',
                          'Clinical Trial', 'Comparative Study', 'Letter', 'Meta-Analysis', 'Review',
@@ -1484,7 +1485,10 @@ def get_single_excel(target_id):
             pubmed.sort_values(by='Year of Publication',ascending=False,inplace=True)
             pubmed.to_excel(writer, sheet_name='References', index=False)
 
-        opentarget = open_target_association(target_id)
+        opentarget= pd.DataFrame(data=None)
+        if res_gen_info:
+            search_term = res_gen_info[0]['Gene_name']
+            opentarget = open_target_association(search_term)
         if not opentarget.empty:
             opentarget.to_excel(writer,sheet_name='open_target_association',index=False)
 
@@ -2115,8 +2119,8 @@ AND A.confidence_score>=8""" % target_id
         if res_bio:
             conc = re.compile(r'(?:of|at)\s(\d+\.*\d*)\s?((?:u|n)M)')
             bioactivity_types = ['Binding', 'Functionnal']
-            percent = ['Activity', 'Residual activity', 'Residual_activity', 'Inhibition']
-            percent_invert = ['Activity', 'Residual activity', 'Residual_activity']
+            percent = ['Activity', 'Residual activity', 'Residual_activity','Residual Activity', 'Inhibition']
+            percent_invert = ['Activity', 'Residual activity','Residual Activity', 'Residual_activity']
             dose_response_type = ['IC50', 'Ki', 'EC50', 'Kd', 'Potency']
             top = ['Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Assay', 'Assay', 'Assay', 'Assay',
                    'Structure',
@@ -2170,7 +2174,7 @@ AND A.confidence_score>=8""" % target_id
             ADME = bioactives[(bioactives.Assay['bioactivity_type'] == 'ADME')].copy()
             ADME.sort_values(by=[('Assay', 'assay_description')], inplace=True)
             other = bioactives[~(bioactives.Bio['standard_type'].isin(
-                ['Emax', 'Efficacy', 'Activity', 'Residual activity', 'Residual_activity', 'Inhibition', 'IC50', 'Ki',
+                ['Emax', 'Efficacy', 'Activity', 'Residual activity', 'Residual_activity','Residual Activity', 'Inhibition', 'IC50', 'Ki',
                  'EC50', 'Kd', 'Potency'])) & ~(bioactives.Assay['bioactivity_type'] == 'ADME')].copy()
             other.sort_values(by=[('Bio', 'standard_type'), ('Assay', 'assay_description')], inplace=True)
             dose_response = bioactives[
