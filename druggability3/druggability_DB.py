@@ -962,17 +962,10 @@ def pubmed_search(gene_name, email):
     columns_to_keep = ['Abstract', 'Affiliation', 'Author', 'Date of Publication',
                        'Journal Title','MeSH Terms', 'Other Term',
                        'Other Term Owner', 'Place of Publication','PMID',
-                       'Registry Number/EC Number', 'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
+                        'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
                        'Journal Article', 'Case Reports', 'Clinical Trial',
                        'Comparative Study', 'Letter', 'Meta-Analysis', 'Review']
     df = df[columns_to_keep]
-    n_entity = []
-    for i in df['Registry Number/EC Number'].values:
-        if type(i) == list:
-            n_entity.append(len(i))
-        else:
-            n_entity.append(0)
-    df['Number of entity'] = n_entity
     df['Year of Publication'] = df['Date of Publication'].str.split(' ', expand=True)[0]
 
     df['PMID'] = pubmed_url + df.PMID + '/'
@@ -1485,9 +1478,8 @@ def get_single_excel(target_id):
             pubmed = pubmed_search(res_gen_info[0]['Gene_name'], args.email)
         if not pubmed.empty:
             col_order = ['Title', 'Journal Title','Year of Publication', 'Journal Article', 'Case Reports',
-                         'Clinical Trial', 'Comparative Study', 'Letter', 'Meta-Analysis', 'Review', 'Number of entity',
-                         'Neurodegeneration', 'Chemistry', 'Major Keywords','Abstract', 'Author', 'Affiliation',  'PMID',
-                         'Registry Number/EC Number',  'MeSH Terms', 'Other Term']
+                         'Clinical Trial', 'Comparative Study', 'Letter', 'Meta-Analysis', 'Review',
+                         'Neurodegeneration', 'Chemistry', 'Major Keywords','Abstract', 'Author', 'Affiliation',  'PMID',  'MeSH Terms', 'Other Term']
             pubmed = pubmed[col_order]
             pubmed.sort_values(by='Year of Publication',ascending=False,inplace=True)
             pubmed.to_excel(writer, sheet_name='References', index=False)
