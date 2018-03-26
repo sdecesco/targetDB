@@ -104,6 +104,30 @@ def retryer(max_retries=10, timeout=5):
 
     return wraps
 
+def retryer_pubmed(max_retries=10, timeout=5):
+    def wraps(func):
+        request_exceptions = (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.HTTPError, urllib.URLError, urllib.HTTPError, ServiceError, WebserviceError
+        )
+
+        def inner(*args, **kwargs):
+            for i in range(max_retries):
+                try:
+                    result = func(*args, **kwargs)
+                except request_exceptions:
+                    time.sleep(timeout * i)
+                    continue
+                else:
+                    return result
+            else:
+                return pd.DataFrame(data=None)
+
+        return inner
+
+    return wraps
+
 
 @retryer(max_retries=10, timeout=10)
 def gene_to_uniprotid(list_of_gene_name):
@@ -918,7 +942,7 @@ def proteins_blast(sequence, gene_id, gene, path):
     return list_of_neighbours
 
 
-@retryer(max_retries=10, timeout=10)
+@retryer_pubmed(max_retries=10, timeout=5)
 def pubmed_search(gene_name, email):
     dict_medline = {"AB": "Abstract", "CI": "Copyright Information", "AD": "Affiliation", "AUID": "Author ID",
                     "IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
@@ -1463,17 +1487,265 @@ def get_single_excel(target_id):
         writer.sheets['Structure'] = wb_struct
 
         dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-        query = "SELECT * FROM Targets WHERE Target_id='" + target_id + "'"
+        query_gen_info = "SELECT * FROM Targets WHERE Target_id='" + target_id + "'"
         query_disease = "SELECT disease_name,disease_id FROM disease WHERE Target_id='" + target_id + "'"
         query_reactome = "SELECT pathway_name FROM pathways WHERE pathway_dataset='Reactome pathways data set' AND Target_id='" + target_id + "'"
         query_kegg = "SELECT pathway_name FROM pathways WHERE pathway_dataset='KEGG pathways data set' AND Target_id='" + target_id + "'"
-        res_gen_info = dbase.get(query)
+        query_disease_exp = """SELECT
+          disease,
+          round(avg(t_stat),1) as t_stat,
+          round(stddev(t_stat),1) as std_dev_t,
+          count(t_stat) as n,
+          max(expression_status) as direction
+          FROM diff_exp_disease
+          WHERE Target_id='%s'
+          GROUP BY Target_id,disease
+          ORDER BY t_stat DESC""" % target_id
+        query_gwas = """SELECT
+          phenotype,
+          organism,
+          p_value,
+          first_author as author,
+          publication_year as 'year',
+          pubmed_id
+        FROM gwas
+        WHERE Target_id='%s'
+        ORDER BY phenotype""" % target_id
+        query_tissue = """SELECT
+          Tissue,
+          round(avg(t_stat),1) as t_stat,
+          round(stddev(t_stat),1) as std_dev_t,
+          count(t_stat) as n
+          FROM diff_exp_tissue
+          WHERE Target_id='%s'
+          GROUP BY Tissue
+          ORDER BY t_stat DESC""" % target_id
+        query_selectivity = """SELECT
+        Selectivity_entropy
+        FROM protein_expression_selectivity
+        WHERE Target_id='%s'""" % target_id
+        query_organ_expression = """SELECT
+          organ as organ_name,
+          sum(value) as Total_value,
+          count(value)as n_tissues,
+          avg(value) as avg_value
+          FROM protein_expression_levels
+          WHERE Target_id='%s'
+          GROUP BY organ
+          ORDER BY avg_value DESC""" % target_id
+        query_tissue_expression = """SELECT
+          organ,
+          tissue,
+          cell,
+          value
+          FROM protein_expression_levels
+          WHERE Target_id='%s'""" % target_id
+        query_phenotype = """SELECT
+          Allele_symbol,
+          Allele_type,
+          CASE WHEN zygosity is null THEN 'NOT DECLARED' ELSE UPPER(zygosity) END AS zygosity,
+          genotype,
+          Phenotype
+        FROM phenotype WHERE Target_id='%s'
+        ORDER BY Allele_id,zygosity,genotype""" % target_id
+        query_isoforms = """SELECT
+          CONCAT(T.Gene_name,'-',I.Isoform_name) as isoform_name,
+          I.Isoform_id,
+          I.Sequence,
+          I.n_residues,
+          CASE WHEN I.Canonical = 1 THEN 'Yes' ELSE 'No' END AS is_canonical,
+          I.Identity AS similarity
+        FROM Isoforms I
+        LEFT JOIN Targets T
+          ON I.Target_id = T.Target_id
+        WHERE I.Target_id='%s' ORDER BY I.Canonical DESC""" % target_id
+        query_isoforms_mod = """SELECT
+          IM.isoform_id,
+          M.start,
+          M.stop,
+          M.previous AS previous_seq,
+          M.action AS modification_type,
+          M.new AS new_seq,
+          M.domains AS in_domains,
+          M.comment AS comments
+        FROM isoform_modifications IM
+        LEFT JOIN modifications M
+          on IM.mod_id = M.Unique_modID
+        WHERE IM.isoform_id in (SELECT I.Isoform_id FROM Isoforms I WHERE I.Target_id='%s')""" % target_id
+        query_var = """SELECT
+          M.start,
+          M.stop,
+          M.previous AS previous_seq,
+          M.action AS modification_type,
+          M.new AS new_seq,
+          M.domains AS in_domains,
+          M.comment AS comments
+        FROM modifications M
+        WHERE M.mod_type = 'VAR' AND M.Target_id='%s'""" % target_id
+        query_mut = """SELECT
+          M.start,
+          M.stop,
+          M.previous AS previous_seq,
+          M.action AS modification_type,
+          M.new AS new_seq,
+          M.domains AS in_domains,
+          M.comment AS comments
+        FROM modifications M
+        WHERE M.mod_type = 'MUTAGEN' AND M.Target_id='%s'""" % target_id
+        query_domains = """SELECT
+          Domain_name,
+          Domain_start as start,
+          Domain_stop as stop,
+          length,
+          source_name as source
+        FROM Domain_targets
+        WHERE Target_id='%s'""" % target_id
+        query_pdb_blast = """SELECT
+          Hit_PDB_code as PDB_code,
+          Chain_Letter as Chain,
+          similarity,
+          Hit_gene_name as gene,
+          Hit_gene_species as species
+        FROM 3D_Blast
+        WHERE Query_target_id='%s'
+        ORDER BY similarity DESC""" % target_id
+        query_pdb = """SELECT
+          C.PDB_code,
+          P.Technique,
+          P.Resolution,
+          GROUP_CONCAT(DISTINCT C.Chain SEPARATOR ',') AS Chain,
+          C.n_residues,
+          C.start_stop,
+          GROUP_CONCAT(DISTINCT D.Domain_name SEPARATOR ',') AS Domain_name,
+          B.type type_of_binder,
+          B.binding_type,
+          B.binding_operator operator,
+          B.binding_value 'value',
+          B.binding_units units,
+          B.lig_name Ligand_name,
+          B.pub_year publication_year
+
+        FROM PDB_Chains C
+          LEFT JOIN PDB P
+            ON C.PDB_code = P.PDB_code
+          LEFT JOIN PDBChain_Domain Domain
+            ON C.Chain_id = Domain.Chain_id
+          LEFT JOIN Domain_targets D
+            ON Domain.Domain_id = D.domain_id
+          LEFT JOIN pdb_bind B
+            ON B.pdb_code = C.PDB_code
+        WHERE C.Target_id='%s'
+        GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % target_id
+        query_pockets = """SELECT
+          F.PDB_code,
+          F.DrugScore as druggability_score,
+          round(F.total_sasa,1) as area,
+          round(F.volume,1) as volume,
+          round((F.apolar_sasa/F.total_sasa)*100,1) as fraction_apolar,
+          F.Pocket_number as pocket_number,
+          F.Score as pocket_score,
+          GROUP_CONCAT(CONCAT(D.Domain_name,' (',Domain.Coverage,'%)') SEPARATOR ',') as domains
+        FROM fPockets F
+          LEFT JOIN fPockets_Domain Domain
+            ON F.Pocket_id = Domain.Pocket_id
+          LEFT JOIN Domain_targets D
+            ON Domain.Domain_id=D.domain_id
+        WHERE F.Target_id='{target}'
+        AND F.druggable='TRUE' AND F.blast='FALSE'
+        GROUP BY F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(
+            target=target_id)
+        query_alt_pockets = """SELECT
+          F.PDB_code,
+          F.DrugScore as druggability_score,
+          round(F.total_sasa,1) as area,
+          round(F.volume,1) as volume,
+          round((F.apolar_sasa/F.total_sasa)*100,1) as fraction_apolar,
+          F.Pocket_number as pocket_number,
+          F.Score as pocket_score,
+          B.Hit_gene_name as gene,
+          B.Hit_gene_species as species,
+          B.similarity
+        FROM fPockets F
+          LEFT JOIN `3D_Blast` B
+            ON F.Target_id = B.Query_target_id AND F.PDB_code = B.Hit_PDB_code
+
+        WHERE F.Target_id='%s'
+        AND F.druggable='TRUE' AND F.blast='TRUE'
+        ORDER BY B.similarity DESC""" % target_id
+        query_bioactives = """SELECT
+        B.lig_id,
+          B.assay_id,
+          B.standard_type,
+          B.operator,
+          B.value_num,
+          B.units,
+          B.activity_comment,
+          B.data_validity_comment,
+          B.doi as ref_bio,
+          B.pchembl_value as pX,
+          L.mol_name,
+          L.max_phase,
+          L.oral,
+          L.indication_class,
+          L.class_def,
+          L.alogp as aLogP,
+          L.acd_logd as LogD,
+          L.acd_logp as LogP,
+          L.acd_most_apka as apKa,
+          L.acd_most_bpka as bpKa,
+          L.HBA,
+          L.HBD,
+          L.TPSA,
+          L.molecularWeight as MW,
+          L.rotatableBonds as rotB,
+          L.n_Ar_rings as nAr,
+          L.n_alerts as n_alerts,
+          L.molecular_species,
+          L.num_ro5_violations as ro5_violations,
+          L.ro3_pass as pass_ro3,
+          L.canonical_smiles as SMILES,
+          A.assay_description,
+          A.doi as assay_ref,
+          A.species as assay_species,
+          A.bioactivity_type,
+          A.confidence_score
+        FROM Crossref C
+          LEFT JOIN bioactivities B
+          ON C.Chembl_id=B.Target_id
+          LEFT JOIN ligands L
+          ON B.lig_id=L.lig_id
+          LEFT JOIN assays A
+          ON B.assay_id=A.assay_id
+        WHERE C.target_id='%s'
+        AND B.operator!='>' AND B.operator!='<'
+        AND A.confidence_score>=8""" % target_id
+        res_bio = dbase.get(query_bioactives)
+        res_pockets = dbase.get(query_pockets)
+        res_alt_pockets = dbase.get(query_alt_pockets)
+        res_domains = dbase.get(query_domains)
+        res_pdb_blast = dbase.get(query_pdb_blast)
+        res_pdb = dbase.get(query_pdb)
+        res_var = dbase.get(query_var)
+        res_mut = dbase.get(query_mut)
+        res_isoforms = dbase.get(query_isoforms)
+        res_isoforms_mod = dbase.get(query_isoforms_mod)
+        res_phenotype = dbase.get(query_phenotype)
+        res_tissue = dbase.get(query_tissue)
+        res_selectivity = dbase.get(query_selectivity)
+        res_organ_exp = dbase.get(query_organ_expression)
+        res_tissue_exp = dbase.get(query_tissue_expression)
+        res_disease_exp = dbase.get(query_disease_exp)
+        res_gwas = dbase.get(query_gwas)
+        res_gen_info = dbase.get(query_gen_info)
         res_disease = dbase.get(query_disease)
         res_reactome = dbase.get(query_reactome)
         res_kegg = dbase.get(query_kegg)
         dbase.close()
 
+        sequence = None
         pubmed = pd.DataFrame(data=None)
+        opentarget = pd.DataFrame(data=None)
+
         if args.email:
             if res_gen_info:
                 pubmed = pubmed_search(res_gen_info[0]['Gene_name'], args.email)
@@ -1484,30 +1756,25 @@ def get_single_excel(target_id):
             pubmed = pubmed[col_order]
             pubmed.sort_values(by='Year of Publication',ascending=False,inplace=True)
             pubmed.to_excel(writer, sheet_name='References', index=False)
-
-        opentarget= pd.DataFrame(data=None)
         if res_gen_info:
             search_term = res_gen_info[0]['Gene_name']
             opentarget = open_target_association(search_term)
         if not opentarget.empty:
             opentarget.to_excel(writer,sheet_name='open_target_association',index=False)
-
-
-
-        # GENERAL INFO HEADER
-        header_index = {'Gene_name': (0, 0), 'Synonyms': (1, 0), 'Target_id': (2, 0), 'Protein_class': (3, 0),
-                        'Protein_class_desc': (4, 0), 'Species': (5, 0), 'Number_isoforms': (6, 0),
-                        'Sequence': (0, 3), 'Cell_location': (0, 4), 'DISEASE': (8, 0, 8, 1), 'disease_id': (9, 0),
-                        'disease_name': (9, 1), 'PATHWAYS': (8, 3, 8, 4), 'Reactome': (9, 3), 'KEGG': (9, 4)}
-        for head in header_index.keys():
-            if len(header_index[head]) == 2:
-                row, col = header_index[head]
-                wb_general_info.write(row, col, head, col_header)
-            elif len(header_index[head]) == 4:
-                row, col, last_row, last_col = header_index[head]
-                wb_general_info.merge_range(row, col, last_row, last_col, head, col_header)
-        sequence = ''
         if res_gen_info:
+            # GENERAL INFO HEADER
+            header_index = {'Gene_name': (0, 0), 'Synonyms': (1, 0), 'Target_id': (2, 0), 'Protein_class': (3, 0),
+                            'Protein_class_desc': (4, 0), 'Species': (5, 0), 'Number_isoforms': (6, 0),
+                            'Sequence': (0, 3), 'Cell_location': (0, 4), 'DISEASE': (8, 0, 8, 1), 'disease_id': (9, 0),
+                            'disease_name': (9, 1), 'PATHWAYS': (8, 3, 8, 4), 'Reactome': (9, 3), 'KEGG': (9, 4)}
+            for head in header_index.keys():
+                if len(header_index[head]) == 2:
+                    row, col = header_index[head]
+                    wb_general_info.write(row, col, head, col_header)
+                elif len(header_index[head]) == 4:
+                    row, col, last_row, last_col = header_index[head]
+                    wb_general_info.merge_range(row, col, last_row, last_col, head, col_header)
+            sequence = ''
             for k, v in res_gen_info[0].items():
                 if k in header_index:
                     row, col = header_index[k]
@@ -1525,6 +1792,17 @@ def get_single_excel(target_id):
                         col = col + 1
                         wb_general_info.write(row, col, v, wrap)
         if res_disease:
+            header_index = {'Gene_name': (0, 0), 'Synonyms': (1, 0), 'Target_id': (2, 0), 'Protein_class': (3, 0),
+                            'Protein_class_desc': (4, 0), 'Species': (5, 0), 'Number_isoforms': (6, 0),
+                            'Sequence': (0, 3), 'Cell_location': (0, 4), 'DISEASE': (8, 0, 8, 1), 'disease_id': (9, 0),
+                            'disease_name': (9, 1), 'PATHWAYS': (8, 3, 8, 4), 'Reactome': (9, 3), 'KEGG': (9, 4)}
+            for head in header_index.keys():
+                if len(header_index[head]) == 2:
+                    row, col = header_index[head]
+                    wb_general_info.write(row, col, head, col_header)
+                elif len(header_index[head]) == 4:
+                    row, col, last_row, last_col = header_index[head]
+                    wb_general_info.merge_range(row, col, last_row, last_col, head, col_header)
             for i in range(len(res_disease)):
                 for k, v in res_disease[i].items():
                     row, col = header_index[k]
@@ -1544,55 +1822,43 @@ def get_single_excel(target_id):
             row = row + 1
             kegg = [i['pathway_name'] for i in res_kegg]
             wb_general_info.write_column(row, col, kegg, v_center)
-
-        # DISEASE HEADER
-        dis_header_index = {'DISEASE REGULATION': (0, 0, 0, 4), 'GWAS': (0, 6, 0, 11), 'disease': (1, 0),
-                            't_stat': (1, 1),
-                            'std_dev_t': (1, 2), 'n': (1, 3), 'direction': (1, 4), 'phenotype': (1, 6),
-                            'organism': (1, 7), 'author': (1, 8), 'year': (1, 9), 'p_value': (1, 10),
-                            'pubmed_id': (1, 11)}
-
-        for head in dis_header_index.keys():
-            if len(dis_header_index[head]) == 2:
-                row, col = dis_header_index[head]
-                wb_disease.write(row, col, head, col_header)
-            elif len(dis_header_index[head]) == 4:
-                row, col, last_row, last_col = dis_header_index[head]
-                wb_disease.merge_range(row, col, last_row, last_col, head, col_header)
-        dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-        query_disease = """SELECT
-  disease,
-  round(avg(t_stat),1) as t_stat,
-  round(stddev(t_stat),1) as std_dev_t,
-  count(t_stat) as n,
-  max(expression_status) as direction
-  FROM diff_exp_disease
-  WHERE Target_id='%s'
-  GROUP BY Target_id,disease
-  ORDER BY t_stat DESC""" % target_id
-        query_gwas = """SELECT
-  phenotype,
-  organism,
-  p_value,
-  first_author as author,
-  publication_year as 'year',
-  pubmed_id
-FROM gwas
-WHERE Target_id='%s'
-ORDER BY phenotype""" % target_id
-        res_disease_exp = dbase.get(query_disease)
-        res_gwas = dbase.get(query_gwas)
-        dbase.close()
         if res_disease_exp:
+            # DISEASE HEADER
+            dis_header_index = {'DISEASE REGULATION': (0, 0, 0, 4), 'GWAS': (0, 6, 0, 11), 'disease': (1, 0),
+                                't_stat': (1, 1),
+                                'std_dev_t': (1, 2), 'n': (1, 3), 'direction': (1, 4), 'phenotype': (1, 6),
+                                'organism': (1, 7), 'author': (1, 8), 'year': (1, 9), 'p_value': (1, 10),
+                                'pubmed_id': (1, 11)}
+
+            for head in dis_header_index.keys():
+                if len(dis_header_index[head]) == 2:
+                    row, col = dis_header_index[head]
+                    wb_disease.write(row, col, head, col_header)
+                elif len(dis_header_index[head]) == 4:
+                    row, col, last_row, last_col = dis_header_index[head]
+                    wb_disease.merge_range(row, col, last_row, last_col, head, col_header)
             for i in range(len(res_disease_exp)):
                 for k, v in res_disease_exp[i].items():
                     row, col = dis_header_index[k]
                     row = row + i + 1
                     wb_disease.write(row, col, v)
-        wb_disease.conditional_format(1, 1, row, 1, {'type': 'data_bar'})
-        wb_disease.conditional_format(1, 2, row, 2,
+            wb_disease.conditional_format(1, 1, row, 1, {'type': 'data_bar'})
+            wb_disease.conditional_format(1, 2, row, 2,
                                       {'type': 'icon_set', 'reverse_icons': True, 'icon_style': '3_traffic_lights'})
         if res_gwas:
+            dis_header_index = {'DISEASE REGULATION': (0, 0, 0, 4), 'GWAS': (0, 6, 0, 11), 'disease': (1, 0),
+                                't_stat': (1, 1),
+                                'std_dev_t': (1, 2), 'n': (1, 3), 'direction': (1, 4), 'phenotype': (1, 6),
+                                'organism': (1, 7), 'author': (1, 8), 'year': (1, 9), 'p_value': (1, 10),
+                                'pubmed_id': (1, 11)}
+
+            for head in dis_header_index.keys():
+                if len(dis_header_index[head]) == 2:
+                    row, col = dis_header_index[head]
+                    wb_disease.write(row, col, head, col_header)
+                elif len(dis_header_index[head]) == 4:
+                    row, col, last_row, last_col = dis_header_index[head]
+                    wb_disease.merge_range(row, col, last_row, last_col, head, col_header)
             for i in range(len(res_gwas)):
                 for k, v in res_gwas[i].items():
                     row, col = dis_header_index[k]
@@ -1602,58 +1868,20 @@ ORDER BY phenotype""" % target_id
                         wb_disease.write(row, col, v, link)
                     else:
                         wb_disease.write(row, col, v)
-
-        # EXPRESSION HEADER
-
-        expression_header_index = {'Tissue Expression': (0, 0, 0, 3), 'Tissue': (1, 0), 't_stat': (1, 1),
-                                   'std_dev_t': (1, 2), 'n': (1, 3), 'Selectivity': (0, 5, 0, 6),
-                                   'ORGANS': (1, 5, 1, 8), 'organ_name': (2, 5), 'Total_value': (2, 6),
-                                   'n_tissues': (2, 7), 'avg_value': (2, 8)}
-        for head in expression_header_index.keys():
-            if len(expression_header_index[head]) == 2:
-                row, col = expression_header_index[head]
-                wb_expression.write(row, col, head, col_header)
-            elif len(expression_header_index[head]) == 4:
-                row, col, last_row, last_col = expression_header_index[head]
-                wb_expression.merge_range(row, col, last_row, last_col, head, col_header)
-
-        dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-        query_tissue = """SELECT
-  Tissue,
-  round(avg(t_stat),1) as t_stat,
-  round(stddev(t_stat),1) as std_dev_t,
-  count(t_stat) as n
-  FROM diff_exp_tissue
-  WHERE Target_id='%s'
-  GROUP BY Tissue
-  ORDER BY t_stat DESC""" % target_id
-        query_selectivity = """SELECT
-Selectivity_entropy
-FROM protein_expression_selectivity
-WHERE Target_id='%s'""" % target_id
-        query_organ_expression = """SELECT
-  organ as organ_name,
-  sum(value) as Total_value,
-  count(value)as n_tissues,
-  avg(value) as avg_value
-  FROM protein_expression_levels
-  WHERE Target_id='%s'
-  GROUP BY organ
-  ORDER BY avg_value DESC""" % target_id
-        query_tissue_expression = """SELECT
-  organ,
-  tissue,
-  cell,
-  value
-  FROM protein_expression_levels
-  WHERE Target_id='%s'""" % target_id
-        res_tissue = dbase.get(query_tissue)
-        res_selectivity = dbase.get(query_selectivity)
-        res_organ_exp = dbase.get(query_organ_expression)
-        res_tissue_exp = dbase.get(query_tissue_expression)
-        dbase.close()
-
         if res_tissue:
+            # EXPRESSION HEADER
+
+            expression_header_index = {'Tissue Expression': (0, 0, 0, 3), 'Tissue': (1, 0), 't_stat': (1, 1),
+                                       'std_dev_t': (1, 2), 'n': (1, 3), 'Selectivity': (0, 5, 0, 6),
+                                       'ORGANS': (1, 5, 1, 8), 'organ_name': (2, 5), 'Total_value': (2, 6),
+                                       'n_tissues': (2, 7), 'avg_value': (2, 8)}
+            for head in expression_header_index.keys():
+                if len(expression_header_index[head]) == 2:
+                    row, col = expression_header_index[head]
+                    wb_expression.write(row, col, head, col_header)
+                elif len(expression_header_index[head]) == 4:
+                    row, col, last_row, last_col = expression_header_index[head]
+                    wb_expression.merge_range(row, col, last_row, last_col, head, col_header)
             for i in range(len(res_tissue)):
                 for k, v in res_tissue[i].items():
                     row, col = expression_header_index[k]
@@ -1665,6 +1893,17 @@ WHERE Target_id='%s'""" % target_id
         if res_selectivity:
             wb_expression.merge_range(0, 7, 0, 8, res_selectivity[0]['Selectivity_entropy'], col_header)
         if res_organ_exp:
+            expression_header_index = {'Tissue Expression': (0, 0, 0, 3), 'Tissue': (1, 0), 't_stat': (1, 1),
+                                       'std_dev_t': (1, 2), 'n': (1, 3), 'Selectivity': (0, 5, 0, 6),
+                                       'ORGANS': (1, 5, 1, 8), 'organ_name': (2, 5), 'Total_value': (2, 6),
+                                       'n_tissues': (2, 7), 'avg_value': (2, 8)}
+            for head in expression_header_index.keys():
+                if len(expression_header_index[head]) == 2:
+                    row, col = expression_header_index[head]
+                    wb_expression.write(row, col, head, col_header)
+                elif len(expression_header_index[head]) == 4:
+                    row, col, last_row, last_col = expression_header_index[head]
+                    wb_expression.merge_range(row, col, last_row, last_col, head, col_header)
             for i in range(len(res_organ_exp)):
                 for k, v in res_organ_exp[i].items():
                     row, col = expression_header_index[k]
@@ -1680,7 +1919,6 @@ WHERE Target_id='%s'""" % target_id
             organ_chart.set_x_axis({'min': 0, 'max': 3, 'major_unit': 1, 'minor_unit_type': 'level',
                                     'major_gridlines': {'visible': True, 'line': {'width': 1.25, 'dash_type': 'dash'}}})
             wb_general_info.insert_chart('G1', organ_chart)
-
         if res_tissue_exp:
             previous_organ = ''
             row = 0
@@ -1714,20 +1952,6 @@ WHERE Target_id='%s'""" % target_id
             brain_chart.set_x_axis({'min': 0, 'max': 3, 'major_unit': 1, 'minor_unit_type': 'level',
                                     'major_gridlines': {'visible': True, 'line': {'width': 1.25, 'dash_type': 'dash'}}})
             wb_general_info.insert_chart('G17', brain_chart)
-
-        # GENOTYPE SECTION
-
-        dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-        query_phenotype = """SELECT
-  Allele_symbol,
-  Allele_type,
-  CASE WHEN zygosity is null THEN 'NOT DECLARED' ELSE UPPER(zygosity) END AS zygosity,
-  genotype,
-  Phenotype
-FROM phenotype WHERE Target_id='%s'
-ORDER BY Allele_id,zygosity,genotype""" % target_id
-        res_phenotype = dbase.get(query_phenotype)
-        dbase.close()
         if res_phenotype:
             from itertools import groupby
             row = 0
@@ -1789,35 +2013,6 @@ ORDER BY Allele_id,zygosity,genotype""" % target_id
             for row1, row2 in row_with_phen:
                 for i in range(row1, row2):
                     wb_genotypes.set_row(i, None, None, {'level': 1, 'collapsed': True, 'hidden': True})
-
-        dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-        query_isoforms = """SELECT
-  CONCAT(T.Gene_name,'-',I.Isoform_name) as isoform_name,
-  I.Isoform_id,
-  I.Sequence,
-  I.n_residues,
-  CASE WHEN I.Canonical = 1 THEN 'Yes' ELSE 'No' END AS is_canonical,
-  I.Identity AS similarity
-FROM Isoforms I
-LEFT JOIN Targets T
-  ON I.Target_id = T.Target_id
-WHERE I.Target_id='%s' ORDER BY I.Canonical DESC""" % target_id
-        query_isoforms_mod = """SELECT
-  IM.isoform_id,
-  M.start,
-  M.stop,
-  M.previous AS previous_seq,
-  M.action AS modification_type,
-  M.new AS new_seq,
-  M.domains AS in_domains,
-  M.comment AS comments
-FROM isoform_modifications IM
-LEFT JOIN modifications M
-  on IM.mod_id = M.Unique_modID
-WHERE IM.isoform_id in (SELECT I.Isoform_id FROM Isoforms I WHERE I.Target_id='%s')""" % target_id
-        res_isoforms = dbase.get(query_isoforms)
-        res_isoforms_mod = dbase.get(query_isoforms_mod)
-        dbase.close()
         if res_isoforms:
             for iso in res_isoforms:
                 iso['mod'] = []
@@ -1862,35 +2057,6 @@ WHERE IM.isoform_id in (SELECT I.Isoform_id FROM Isoforms I WHERE I.Target_id='%
             for row1, row2 in row_to_hide:
                 for i in range(row1, row2):
                     wb_isoforms.set_row(i, None, None, {'level': 1, 'collapsed': True, 'hidden': True})
-
-        dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-        query_var = """SELECT
-  M.start,
-  M.stop,
-  M.previous AS previous_seq,
-  M.action AS modification_type,
-  M.new AS new_seq,
-  M.domains AS in_domains,
-  M.comment AS comments
-FROM modifications M
-WHERE M.mod_type = 'VAR' AND M.Target_id='%s'""" % target_id
-        query_mut = """SELECT
-  M.start,
-  M.stop,
-  M.previous AS previous_seq,
-  M.action AS modification_type,
-  M.new AS new_seq,
-  M.domains AS in_domains,
-  M.comment AS comments
-FROM modifications M
-WHERE M.mod_type = 'MUTAGEN' AND M.Target_id='%s'""" % target_id
-        res_var = dbase.get(query_var)
-        res_mut = dbase.get(query_mut)
-
-        mod_header = {'start': 0, 'stop': 1, 'previous_seq': 3, 'modification_type': 2, 'new_seq': 4, 'in_domains': 5,
-                      'comments': 6}
-        dbase.close()
-
         if res_var and res_mut:
             col_var = 0
             col_mut = 0
@@ -1898,6 +2064,9 @@ WHERE M.mod_type = 'MUTAGEN' AND M.Target_id='%s'""" % target_id
             col_var = 0
             col_mut = 0
         if res_var:
+            mod_header = {'start': 0, 'stop': 1, 'previous_seq': 3, 'modification_type': 2, 'new_seq': 4,
+                          'in_domains': 5,
+                          'comments': 6}
             row = 0
             wb_var_mut.merge_range(row, col_var, row, col_var + 6, 'VARIANTS', col_header)
             row += 1
@@ -1911,6 +2080,9 @@ WHERE M.mod_type = 'MUTAGEN' AND M.Target_id='%s'""" % target_id
                     else:
                         wb_var_mut.write(row, col_var + mod_header[key], value)
         if res_mut:
+            mod_header = {'start': 0, 'stop': 1, 'previous_seq': 3, 'modification_type': 2, 'new_seq': 4,
+                          'in_domains': 5,
+                          'comments': 6}
             if res_var:
                 row += 2
             else:
@@ -1926,47 +2098,6 @@ WHERE M.mod_type = 'MUTAGEN' AND M.Target_id='%s'""" % target_id
                         wb_var_mut.write(row, col_mut + mod_header[key], value, wrap)
                     else:
                         wb_var_mut.write(row, col_mut + mod_header[key], value)
-
-        dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-        query_domains = """SELECT
-  Domain_name,
-  Domain_start as start,
-  Domain_stop as stop,
-  length,
-  source_name as source
-FROM Domain_targets
-WHERE Target_id='%s'""" % target_id
-        query_pdb_blast = """SELECT
-  Hit_PDB_code as PDB_code,
-  Chain_Letter as Chain,
-  similarity,
-  Hit_gene_name as gene,
-  Hit_gene_species as species
-FROM 3D_Blast
-WHERE Query_target_id='%s'
-ORDER BY similarity DESC""" % target_id
-        query_pdb = """SELECT
-  C.PDB_code,
-  P.Technique,
-  P.Resolution,
-  GROUP_CONCAT(DISTINCT C.Chain SEPARATOR ',') AS Chain,
-  C.n_residues,
-  C.start_stop,
-  GROUP_CONCAT(DISTINCT D.Domain_name SEPARATOR ',') AS Domain_name
-FROM PDB_Chains C
-  LEFT JOIN PDB P
-    ON C.PDB_code = P.PDB_code
-  LEFT JOIN PDBChain_Domain Domain
-    ON C.Chain_id = Domain.Chain_id
-  LEFT JOIN Domain_targets D
-    ON Domain.Domain_id = D.domain_id
-WHERE C.Target_id='%s'
-GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % target_id
-        res_domains = dbase.get(query_domains)
-        res_pdb_blast = dbase.get(query_pdb_blast)
-        res_pdb = dbase.get(query_pdb)
-        dbase.close()
-
         row = 0
         col_orig = 0
         if sequence:
@@ -1982,7 +2113,6 @@ GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % targ
             dom = dom[col_order]
             dom.to_excel(writer, sheet_name='Structure', startrow=row, index=False)
             row += len(dom) + 1
-
         if res_pdb_blast:
             wb_struct.merge_range(row, col_orig, row, col_orig + 4, 'PDB BLAST', col_header)
             row += 1
@@ -1990,62 +2120,22 @@ GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % targ
             col_order = ['PDB_code', 'Chain', 'similarity', 'gene', 'species']
             blast = blast[col_order]
             blast.to_excel(writer, sheet_name='Structure', startrow=row, index=False)
-        col_orig = 6
         if res_pdb:
+            col_orig = 6
             row = 0
             wb_struct.merge_range(row, col_orig, row, col_orig + 7, 'PDB', col_header)
+            wb_struct.merge_range(row, col_orig+8, row, col_orig + 14, 'PDB: Ligand', col_header)
             row += 1
 
             pdb = pd.DataFrame.from_records(res_pdb)
             pdb['% of full protein'] = round((pdb['n_residues'] / len(sequence)) * 100, 1)
+            pdb.operator=' '+pdb.operator
             col_order = ['PDB_code', 'Technique', 'Resolution', 'Chain', 'Domain_name',
-                         'n_residues', '% of full protein', 'start_stop']
+                         'n_residues', '% of full protein','start_stop', 'type_of_binder', 'binding_type', 'operator', 'value', 'units',
+                         'Ligand_name', 'publication_year']
             pdb = pdb[col_order]
             pdb.to_excel(writer, sheet_name='Structure', startrow=row, startcol=col_orig, index=False)
-
-        dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-        query_pockets = """SELECT
-  F.PDB_code,
-  F.DrugScore as druggability_score,
-  round(F.total_sasa,1) as area,
-  round(F.volume,1) as volume,
-  round((F.apolar_sasa/F.total_sasa)*100,1) as fraction_apolar,
-  F.Pocket_number as pocket_number,
-  F.Score as pocket_score,
-  GROUP_CONCAT(CONCAT(D.Domain_name,' (',Domain.Coverage,'%)') SEPARATOR ',') as domains
-FROM fPockets F
-  LEFT JOIN fPockets_Domain Domain
-    ON F.Pocket_id = Domain.Pocket_id
-  LEFT JOIN Domain_targets D
-    ON Domain.Domain_id=D.domain_id
-WHERE F.Target_id='{target}'
-AND F.druggable='TRUE' AND F.blast='FALSE'
-GROUP BY F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(
-            target=target_id)
-        query_alt_pockets = """SELECT
-  F.PDB_code,
-  F.DrugScore as druggability_score,
-  round(F.total_sasa,1) as area,
-  round(F.volume,1) as volume,
-  round((F.apolar_sasa/F.total_sasa)*100,1) as fraction_apolar,
-  F.Pocket_number as pocket_number,
-  F.Score as pocket_score,
-  B.Hit_gene_name as gene,
-  B.Hit_gene_species as species,
-  B.similarity
-FROM fPockets F
-  LEFT JOIN `3D_Blast` B
-    ON F.Target_id = B.Query_target_id AND F.PDB_code = B.Hit_PDB_code
-
-WHERE F.Target_id='%s'
-AND F.druggable='TRUE' AND F.blast='TRUE'
-ORDER BY B.similarity DESC""" % target_id
-        res_pockets = dbase.get(query_pockets)
-        res_alt_pockets = dbase.get(query_alt_pockets)
-        dbase.close()
-
         col_alt_pocket = 0
-
         if res_pockets:
             col_alt_pocket = 9
             pock = pd.DataFrame.from_records(res_pockets)
@@ -2055,7 +2145,6 @@ ORDER BY B.similarity DESC""" % target_id
             pock.to_excel(writer, sheet_name='Pockets', startrow=1, index=False)
             wb_pockets = writer.sheets['Pockets']
             wb_pockets.merge_range(0, 0, 0, 7, 'DRUGGABLE POCKETS', col_header)
-
         if res_alt_pockets:
             alt_pock = pd.DataFrame.from_records(res_alt_pockets)
             col_order = ['PDB_code', 'druggability_score', 'pocket_score', 'pocket_number',
@@ -2065,57 +2154,6 @@ ORDER BY B.similarity DESC""" % target_id
             wb_pockets = writer.sheets['Pockets']
             wb_pockets.merge_range(0, 0 + col_alt_pocket, 0, 9 + col_alt_pocket,
                                    'ALTERNATE DRUGGABLE POCKETS (PDB from blast)', col_header)
-
-        dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-        query_bioactives = """SELECT
-B.lig_id,
-  B.assay_id,
-  B.standard_type,
-  B.operator,
-  B.value_num,
-  B.units,
-  B.activity_comment,
-  B.data_validity_comment,
-  B.doi as ref_bio,
-  B.pchembl_value as pX,
-  L.mol_name,
-  L.max_phase,
-  L.oral,
-  L.indication_class,
-  L.class_def,
-  L.alogp as aLogP,
-  L.acd_logd as LogD,
-  L.acd_logp as LogP,
-  L.acd_most_apka as apKa,
-  L.acd_most_bpka as bpKa,
-  L.HBA,
-  L.HBD,
-  L.TPSA,
-  L.molecularWeight as MW,
-  L.rotatableBonds as rotB,
-  L.n_Ar_rings as nAr,
-  L.n_alerts as n_alerts,
-  L.molecular_species,
-  L.num_ro5_violations as ro5_violations,
-  L.ro3_pass as pass_ro3,
-  L.canonical_smiles as SMILES,
-  A.assay_description,
-  A.doi as assay_ref,
-  A.species as assay_species,
-  A.bioactivity_type,
-  A.confidence_score
-FROM Crossref C
-  LEFT JOIN bioactivities B
-  ON C.Chembl_id=B.Target_id
-  LEFT JOIN ligands L
-  ON B.lig_id=L.lig_id
-  LEFT JOIN assays A
-  ON B.assay_id=A.assay_id
-WHERE C.target_id='%s'
-AND B.operator!='>' AND B.operator!='<'
-AND A.confidence_score>=8""" % target_id
-        res_bio = dbase.get(query_bioactives)
-        dbase.close()
         if res_bio:
             conc = re.compile(r'(?:of|at)\s(\d+\.*\d*)\s?((?:u|n)M)')
             bioactivity_types = ['Binding', 'Functionnal']
@@ -2893,7 +2931,7 @@ if __name__ == "__main__":
     parser.add_argument('-db_user', '--db_username',
                         help='enter the username of your database', metavar='',
                         type=str)
-    parser.add_argument('-email', '--email',
+    parser.add_argument('-pubmed_email', '--email',
                         help='enter your email address (required for the pubmed search', metavar='',
                         type=str)
     args = parser.parse_args()
