@@ -30,6 +30,7 @@ from operator import itemgetter
 from Bio.Blast import NCBIXML
 import pandas as pd
 import numpy as np
+import scipy.stats as sc
 from druggability3 import cns_mpo as mpo
 from druggability3 import drugg_errors
 
@@ -2159,20 +2160,18 @@ def get_single_excel(target_id):
             bioactivity_types = ['Binding', 'Functionnal']
             percent = ['Activity', 'Residual activity', 'Residual_activity','Residual Activity', 'Inhibition']
             percent_invert = ['Activity', 'Residual activity','Residual Activity', 'Residual_activity']
-            dose_response_type = ['IC50', 'Ki', 'EC50', 'Kd', 'Potency']
-            top = ['Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Bio', 'Assay', 'Assay', 'Assay', 'Assay',
-                   'Structure',
-                   'Prop', 'Prop', 'Prop', 'Prop', 'Prop', 'Prop', 'Prop', 'Prop', 'Prop', 'Prop', 'Prop', 'Prop',
-                   'Prop', 'Prop', 'Prop', 'Lig_info', 'Lig_info', 'Lig_info', 'Lig_info', 'Lig_info', 'Lig_info',
-                   'Ref', 'Ref', 'ID', 'ID', 'Structure']
-            col = ['standard_type', 'operator', 'value_num', 'units', 'pX', 'Conc', 'Conc_units', 'activity_comment',
+            binding_affinity = ['Ki','Kd']
+            dose_response_type = ['IC50', 'EC50', 'Potency']
+
+            header_groups = {'Bioactivity info': (0, 9), 'Assay info': (10, 14), 'Structure': (15, 15),
+                             'Ligand properties': (16, 30), 'Ligand info': (31, 36), 'References': (37, 38)}
+
+            col = ['lig_id','standard_type', 'operator', 'value_num', 'units', 'pX', 'Conc', 'Conc_units', 'activity_comment',
                    'data_validity_comment',
-                   'bioactivity_type', 'assay_species', 'assay_description', 'confidence_score', 'SMILES', 'HBA', 'HBD',
+                   'bioactivity_type', 'assay_species', 'assay_description', 'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD',
                    'LogD', 'LogP', 'MW', 'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
                    'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class',
-                   'class_def', 'max_phase', 'oral', 'assay_ref', 'ref_bio', 'assay_id', 'lig_id']
-            tup = tuple(zip(top, col))
-            multi = pd.MultiIndex.from_tuples(tup)
+                   'class_def', 'max_phase', 'oral', 'assay_ref', 'ref_bio']
 
             bioactives = pd.DataFrame.from_records(res_bio)
 
@@ -2186,66 +2185,147 @@ def get_single_excel(target_id):
                                                        HBD=bioactives['HBD'], TPSA=bioactives['TPSA'])
             bioactives = bioactives[col]
             bioactives.operator = ' ' + bioactives.operator
-            bioactives.columns = multi
+
 
             percent_bio = bioactives[
-                (bioactives.Bio['units'] == '%') & (bioactives.Bio['standard_type'].isin(percent)) & (
-                    bioactives.Assay['bioactivity_type'].isin(bioactivity_types))].copy()
+                (bioactives['units'] == '%') & (bioactives['standard_type'].isin(percent)) & (
+                    bioactives['bioactivity_type'].isin(bioactivity_types))].copy()
 
             for key in percent_invert:
-                percent_bio.loc[percent_bio.Bio['standard_type'] == key, [('Bio', 'value_num')]] = 100 - \
-                                                                                                   percent_bio.Bio[
-                                                                                                       'value_num']
-                percent_bio.loc[percent_bio.Bio['standard_type'] == key, [('Bio', 'standard_type')]] = '100 - ' + \
-                                                                                                       percent_bio.Bio[
-                                                                                                           'standard_type']
-            percent_bio = percent_bio[(percent_bio.Bio['value_num'] > 50)]
-            percent_bio.sort_values(by=[('Bio', 'value_num')], ascending=False, inplace=True)
+                percent_bio.loc[percent_bio['standard_type'] == key, 'value_num'] = 100 - percent_bio['value_num']
+                percent_bio.loc[percent_bio['standard_type'] == key, 'standard_type'] = '100 - ' + percent_bio['standard_type']
+            percent_bio = percent_bio[(percent_bio['value_num'] > 50)]
+            percent_bio.sort_values(by='value_num', ascending=False, inplace=True)
             efficacy_bio = bioactives[
-                (bioactives.Bio['units'] == '%') & (bioactives.Bio['standard_type'] == 'Efficacy')].copy()
-            efficacy_bio = efficacy_bio[efficacy_bio.Bio.value_num >= 50]
-            efficacy_bio.sort_values(by=[('Bio', 'value_num')], ascending=False, inplace=True)
-            emax = bioactives[(bioactives.Bio['units'] == '%') & (bioactives.Bio['standard_type'] == 'Emax') & (
-                bioactives.Assay['bioactivity_type'].isin(bioactivity_types))].copy()
-            emax = emax[emax.Bio.value_num >= 50]
-            emax.sort_values(by=[('Bio', 'value_num')], ascending=False, inplace=True)
-            ADME = bioactives[(bioactives.Assay['bioactivity_type'] == 'ADME')].copy()
-            ADME.sort_values(by=[('Assay', 'assay_description')], inplace=True)
-            other = bioactives[~(bioactives.Bio['standard_type'].isin(
+                (bioactives['units'] == '%') & (bioactives['standard_type'] == 'Efficacy')].copy()
+            efficacy_bio = efficacy_bio[efficacy_bio.value_num >= 50]
+            efficacy_bio.sort_values(by='value_num', ascending=False, inplace=True)
+            emax = bioactives[(bioactives['units'] == '%') & (bioactives['standard_type'] == 'Emax') & (
+                bioactives['bioactivity_type'].isin(bioactivity_types))].copy()
+            emax = emax[emax.value_num >= 50]
+            emax.sort_values(by='value_num', ascending=False, inplace=True)
+            ADME = bioactives[(bioactives['bioactivity_type'] == 'ADME')].copy()
+            ADME.sort_values(by='assay_description', inplace=True)
+            other = bioactives[~(bioactives['standard_type'].isin(
                 ['Emax', 'Efficacy', 'Activity', 'Residual activity', 'Residual_activity','Residual Activity', 'Inhibition', 'IC50', 'Ki',
-                 'EC50', 'Kd', 'Potency'])) & ~(bioactives.Assay['bioactivity_type'] == 'ADME')].copy()
-            other.sort_values(by=[('Bio', 'standard_type'), ('Assay', 'assay_description')], inplace=True)
+                 'EC50', 'Kd', 'Potency'])) & ~(bioactives['bioactivity_type'] == 'ADME')].copy()
+            other.sort_values(by=['standard_type', 'assay_description'], inplace=True)
             dose_response = bioactives[
-                (bioactives.Bio['units'] == 'nM') & (bioactives.Bio['standard_type'].isin(dose_response_type)) & (
-                    bioactives.Assay['bioactivity_type'].isin(bioactivity_types))].copy()
-            dose_response = dose_response[dose_response.Bio.value_num <= 1000]
-            dose_response.sort_values(by=[('Bio', 'standard_type'), ('Bio', 'value_num')], inplace=True)
-            dose_response.loc[:, ('Bio', 'pX')].fillna(-np.log10(dose_response.Bio.value_num / 1000000000),
+                (bioactives['units'] == 'nM') & (bioactives['standard_type'].isin(dose_response_type)) & (
+                    bioactives['bioactivity_type'].isin(bioactivity_types))].copy()
+            dose_response = dose_response[dose_response.value_num <= 1000]
+            dose_response.sort_values(by=['standard_type','value_num'], inplace=True)
+            dose_response['pX'].fillna(-np.log10(dose_response.value_num / 1000000000),
                                                        inplace=True)
+
+            binding = bioactives[
+                (bioactives['units'] == 'nM') & (bioactives['standard_type'].isin(binding_affinity)) & (
+                    bioactives['bioactivity_type'].isin(bioactivity_types))].copy()
+            binding = binding[binding.value_num <= 1000]
+            binding.sort_values(by=['standard_type', 'value_num'], inplace=True)
+            binding['pX'].fillna(-np.log10(binding.value_num / 1000000000), inplace=True)
+
+            query_lig = "','".join(binding.lig_id.unique())
+            dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
+            query = """SELECT
+                    B.lig_id,
+                    B.Target_id,
+                    B.target_name,
+                    ROUND(AVG(B.value_num),2) avg_value,
+                    ROUND(STDDEV(B.value_num),2) sttdev,
+                    COUNT(*) n_values
+                    FROM bioactivities B
+                      LEFT JOIN assays A
+                      ON B.assay_id=A.assay_id
+                    WHERE B.operator='=' 
+                      AND B.lig_id in ('%s')
+                      AND A.bioactivity_type='Binding'
+                      AND UPPER(B.standard_type) in ('KD','KI')
+                      AND B.data_validity_comment is NULL
+                      AND A.confidence_score>=8
+            GROUP BY B.lig_id,B.Target_id""" % query_lig
+            res_lig = dbase.get(query)
+            dbase.close()
+
+            entropies = []
+            binding_data = pd.DataFrame.from_records(res_lig)
+            for name, group in binding_data.groupby('lig_id'):
+                group = group[(group['sttdev'] < group['avg_value'])].copy()
+                group['association'] = (1 / group.avg_value)
+                group['association_prob'] = group.association / group.association.sum()
+                entropies.append({'Selectivity': round(sc.entropy(group.association_prob), 2), 'lig_id': name,
+                                  'number of other targets': len(group),
+                                  'targets name': ' / '.join(np.unique(group['target_name'].values))})
+
+            entropy = pd.DataFrame(data=entropies)
+
+            binding = pd.merge(binding, entropy, on='lig_id')
+
+            col_order = ['lig_id', 'standard_type', 'operator', 'value_num', 'units', 'pX', 'Selectivity',
+                         'number of other targets',
+                         'targets name', 'activity_comment', 'bioactivity_type', 'assay_species', 'assay_description',
+                         'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD', 'LogD', 'LogP', 'MW',
+                         'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
+                         'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species',
+                         'indication_class', 'class_def', 'max_phase', 'oral', 'assay_ref',
+                         'ref_bio']
+            binding = binding[col_order]
+
+
             CNS_MPO_criteria = [{'criteria': '>=', 'type': 'number', 'value': 4.5},
                                 {'criteria': '>=', 'type': 'number', 'value': 3.5},
                                 {'criteria': '<', 'type': 'number', 'value': 3}]
+            CNS_MPO_col = 'AE1:AE'
+
+
+            if not binding.empty:
+                binding.to_excel(writer, sheet_name='Binding',startrow=1,index=False)
+                w_bd = writer.sheets['Binding']
+                for head, span in header_groups.items():
+                    if span[0] == span[1]:
+                        w_bd.write(0,span[0],head,col_header)
+                    else:
+                        w_bd.merge_range(0,span[0],0,span[1],head,col_header)
+                w_bd.conditional_format(CNS_MPO_col + (str(len(binding) + 3)),
+                                        {'type': 'icon_set', 'icon_style': '3_traffic_lights'
+                                            , 'icons': CNS_MPO_criteria})
+
 
             if not dose_response.empty:
-                dose_response.to_excel(writer, sheet_name='Dose_response')
+                dose_response.to_excel(writer, sheet_name='Dose_response',startrow=1,index=False)
                 w_dr = writer.sheets['Dose_response']
-                w_dr.conditional_format('AD1:AD' + (str(len(dose_response) + 3)),
+                for head, span in header_groups.items():
+                    if span[0] == span[1]:
+                        w_dr.write(0,span[0],head,col_header)
+                    else:
+                        w_dr.merge_range(0,span[0],0,span[1],head,col_header)
+                w_dr.conditional_format(CNS_MPO_col + (str(len(dose_response) + 3)),
                                         {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                             , 'icons': CNS_MPO_criteria})
 
             if not percent_bio.empty:
-                percent_bio.to_excel(writer, sheet_name='Percent_inhibition')
+                percent_bio.to_excel(writer, sheet_name='Percent_inhibition',startrow=1,index=False)
                 w_per = writer.sheets['Percent_inhibition']
-                w_per.conditional_format('AD1:AD' + (str(len(percent_bio) + 3)),
+                for head, span in header_groups.items():
+                    if span[0] == span[1]:
+                        w_per.write(0,span[0],head,col_header)
+                    else:
+                        w_per.merge_range(0,span[0],0,span[1],head,col_header)
+                w_per.conditional_format(CNS_MPO_col+ (str(len(percent_bio) + 3)),
                                          {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                              , 'icons': [{'criteria': '>=', 'type': 'number', 'value': 4.5},
                                                          {'criteria': '>=', 'type': 'number', 'value': 3.5},
                                                          {'criteria': '<', 'type': 'number', 'value': 3}]})
 
             if not efficacy_bio.empty:
-                efficacy_bio.to_excel(writer, sheet_name='Emax_Efficacy')
+                efficacy_bio.to_excel(writer, sheet_name='Emax_Efficacy',startrow=1,index=False)
                 w_eff = writer.sheets['Emax_Efficacy']
-                w_eff.conditional_format('AD1:AD' + (str(len(efficacy_bio) + 3)),
+                for head, span in header_groups.items():
+                    if span[0] == span[1]:
+                        w_eff.write(0,span[0],head,col_header)
+                    else:
+                        w_eff.merge_range(0,span[0],0,span[1],head,col_header)
+                w_eff.conditional_format(CNS_MPO_col + (str(len(efficacy_bio) + 3)),
                                          {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                              , 'icons': [{'criteria': '>=', 'type': 'number', 'value': 4.5},
                                                          {'criteria': '>=', 'type': 'number', 'value': 3.5},
@@ -2254,23 +2334,38 @@ def get_single_excel(target_id):
             else:
                 row_efficacy = 0
             if not emax.empty:
-                emax.to_excel(writer, sheet_name='Emax_Efficacy', startrow=row_efficacy)
+                emax.to_excel(writer, sheet_name='Emax_Efficacy', startrow=row_efficacy+1,index=False)
                 w_eff = writer.sheets['Emax_Efficacy']
-                w_eff.conditional_format('AD1:AD' + (str(len(emax) + row_efficacy + 3)),
+                for head, span in header_groups.items():
+                    if span[0] == span[1]:
+                        w_eff.write(row_efficacy,span[0],head,col_header)
+                    else:
+                        w_eff.merge_range(row_efficacy,span[0],row_efficacy,span[1],head,col_header)
+                w_eff.conditional_format(CNS_MPO_col + (str(len(emax) + row_efficacy + 3)),
                                          {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                              , 'icons': CNS_MPO_criteria})
 
             if not ADME.empty:
-                ADME.to_excel(writer, sheet_name='ADME')
+                ADME.to_excel(writer, sheet_name='ADME',startrow=1,index=False)
                 w_adme = writer.sheets['ADME']
-                w_adme.conditional_format('AD1:AD' + (str(len(ADME) + 3)),
+                for head, span in header_groups.items():
+                    if span[0] == span[1]:
+                        w_adme.write(0,span[0],head,col_header)
+                    else:
+                        w_adme.merge_range(0,span[0],0,span[1],head,col_header)
+                w_adme.conditional_format(CNS_MPO_col + (str(len(ADME) + 3)),
                                           {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                               , 'icons': CNS_MPO_criteria})
 
             if not other.empty:
-                other.to_excel(writer, sheet_name='Other_bioactivities')
+                other.to_excel(writer, sheet_name='Other_bioactivities',startrow=1,index=False)
                 w_other = writer.sheets['Other_bioactivities']
-                w_other.conditional_format('AD1:AD' + (str(len(other) + 3)),
+                for head, span in header_groups.items():
+                    if span[0] == span[1]:
+                        w_other.write(0,span[0],head,col_header)
+                    else:
+                        w_other.merge_range(0,span[0],0,span[1],head,col_header)
+                w_other.conditional_format(CNS_MPO_col + (str(len(other) + 3)),
                                            {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                                , 'icons': CNS_MPO_criteria})
 
