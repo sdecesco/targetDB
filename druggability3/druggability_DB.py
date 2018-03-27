@@ -2313,9 +2313,7 @@ def get_single_excel(target_id):
                         w_per.merge_range(0,span[0],0,span[1],head,col_header)
                 w_per.conditional_format(CNS_MPO_col+ (str(len(percent_bio) + 3)),
                                          {'type': 'icon_set', 'icon_style': '3_traffic_lights'
-                                             , 'icons': [{'criteria': '>=', 'type': 'number', 'value': 4.5},
-                                                         {'criteria': '>=', 'type': 'number', 'value': 3.5},
-                                                         {'criteria': '<', 'type': 'number', 'value': 3}]})
+                                             , 'icons': CNS_MPO_criteria})
 
             if not efficacy_bio.empty:
                 efficacy_bio.to_excel(writer, sheet_name='Emax_Efficacy',startrow=1,index=False)
@@ -2327,9 +2325,7 @@ def get_single_excel(target_id):
                         w_eff.merge_range(0,span[0],0,span[1],head,col_header)
                 w_eff.conditional_format(CNS_MPO_col + (str(len(efficacy_bio) + 3)),
                                          {'type': 'icon_set', 'icon_style': '3_traffic_lights'
-                                             , 'icons': [{'criteria': '>=', 'type': 'number', 'value': 4.5},
-                                                         {'criteria': '>=', 'type': 'number', 'value': 3.5},
-                                                         {'criteria': '<', 'type': 'number', 'value': 3}]})
+                                             , 'icons': CNS_MPO_criteria})
                 row_efficacy = len(efficacy_bio) + len(efficacy_bio.columns.levels) + 1
             else:
                 row_efficacy = 0
