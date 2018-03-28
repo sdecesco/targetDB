@@ -2249,27 +2249,28 @@ def get_single_excel(target_id):
 
             entropies = []
             binding_data = pd.DataFrame.from_records(res_lig)
-            for name, group in binding_data.groupby('lig_id'):
-                group = group[(group['sttdev'] < group['avg_value'])].copy()
-                group['association'] = (1 / group.avg_value)
-                group['association_prob'] = group.association / group.association.sum()
-                entropies.append({'Selectivity': round(sc.entropy(group.association_prob), 2), 'lig_id': name,
-                                  'number of other targets': len(group),
-                                  'targets name': ' / '.join(np.unique(group['target_name'].values))})
+            if not binding_data.empty:
+                for name, group in binding_data.groupby('lig_id'):
+                    group = group[(group['sttdev'] < group['avg_value'])].copy()
+                    group['association'] = (1 / group.avg_value)
+                    group['association_prob'] = group.association / group.association.sum()
+                    entropies.append({'Selectivity': round(sc.entropy(group.association_prob), 2), 'lig_id': name,
+                                      'number of other targets': len(group),
+                                      'targets name': ' / '.join(np.unique(group['target_name'].values))})
 
-            entropy = pd.DataFrame(data=entropies)
+                entropy = pd.DataFrame(data=entropies)
 
-            binding = pd.merge(binding, entropy, on='lig_id')
+                binding = pd.merge(binding, entropy, on='lig_id')
 
-            col_order = ['lig_id', 'standard_type', 'operator', 'value_num', 'units', 'pX', 'Selectivity',
-                         'number of other targets',
-                         'targets name', 'activity_comment', 'bioactivity_type', 'assay_species', 'assay_description',
-                         'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD', 'LogD', 'LogP', 'MW',
-                         'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
-                         'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species',
-                         'indication_class', 'class_def', 'max_phase', 'oral', 'assay_ref',
-                         'ref_bio']
-            binding = binding[col_order]
+                col_order = ['lig_id', 'standard_type', 'operator', 'value_num', 'units', 'pX', 'Selectivity',
+                             'number of other targets',
+                             'targets name', 'activity_comment', 'bioactivity_type', 'assay_species', 'assay_description',
+                             'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD', 'LogD', 'LogP', 'MW',
+                             'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
+                             'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species',
+                             'indication_class', 'class_def', 'max_phase', 'oral', 'assay_ref',
+                             'ref_bio']
+                binding = binding[col_order]
 
 
             CNS_MPO_criteria = [{'criteria': '>=', 'type': 'number', 'value': 4.5},
