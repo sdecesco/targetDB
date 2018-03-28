@@ -1013,7 +1013,7 @@ def pubmed_search(gene_name, email):
                     major.append(k)
                 if '*chemistry' in k or '*Chemistry' in k:
                     chemistry = True
-            major_keywords.append(major)
+            major_keywords.append(' / '.join(major))
             if neuro:
                 neurodeg.append(True)
             else:
