@@ -71,12 +71,6 @@ def get_list_entries():
     return list_of_entries, gene_in_db
 
 
-# ===================# INITIATE HUMANMINE SERVICE #============================#
-
-
-service = Service("http://www.humanmine.org/humanmine/service")
-
-
 class NetworkError(RuntimeError):
     pass
 
@@ -104,6 +98,7 @@ def retryer(max_retries=10, timeout=5):
         return inner
 
     return wraps
+
 
 def retryer_pubmed(max_retries=10, timeout=5):
     def wraps(func):
@@ -135,7 +130,7 @@ def gene_to_uniprotid(list_of_gene_name):
     mg = mygene.MyGeneInfo()
     gene_id = {}
     request = mg.querymany(list_of_gene_name, scopes="symbol", fields=['uniprot'], species=9606, as_dataframe=True)
-
+    request.dropna(axis=0, subset=['uniprot'], inplace=True)
     try:
         uniprot_dict = request['uniprot'].to_dict()
     except KeyError:
@@ -231,6 +226,7 @@ def get_crossref_pdb_go_chembl(record):
 
 @retryer(max_retries=10, timeout=10)
 def get_humanmine_data(gene):
+    service = Service("http://www.humanmine.org/humanmine/service")
     disease = []
     phenotypes = []
     differential_exp_tissues = []
@@ -944,7 +940,7 @@ def proteins_blast(sequence, gene_id, gene, path):
 
 
 @retryer_pubmed(max_retries=10, timeout=5)
-def pubmed_search(gene_name, email):
+def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
     dict_medline = {"AB": "Abstract", "CI": "Copyright Information", "AD": "Affiliation", "AUID": "Author ID",
                     "IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
                     "FAU": "Full Author", "CN": "Corporate Author", "DCOM": "Date Completed", "DA": "Date Created",
@@ -970,8 +966,15 @@ def pubmed_search(gene_name, email):
     pubmed_url = 'https://www.ncbi.nlm.nih.gov/pubmed/'
 
     Entrez.email = email
-    protein_id = Entrez.esearch(db='pubmed', term=gene_name,retmax=500)
+    if mesh_term:
+        mesh = '"' + mesh_term + '"[Mesh] AND '
+        search_term = mesh + gene_name
+    else:
+        search_term = gene_name
+    protein_id = Entrez.esearch(db='pubmed', term=search_term, retmax=500)
     pid = Entrez.read(protein_id)
+    if return_number:
+        return pid['Count']
     # handle = Entrez.elink(db='pubmed', dbfrom="gene", id=pid['IdList'][0], linkname="gene_pubmed")
     # rec = Entrez.read(handle)
     # pub_id = [i['Id'] for i in rec[0]['LinkSetDb'][0]['Link']]
@@ -985,9 +988,9 @@ def pubmed_search(gene_name, email):
     for pub_type in pub_type_list:
         df[pub_type] = [pub_type in i for i in df['Publication Type'].values]
     columns_to_keep = ['Abstract', 'Affiliation', 'Author', 'Date of Publication',
-                       'Journal Title','MeSH Terms', 'Other Term',
-                       'Other Term Owner', 'Place of Publication','PMID',
-                        'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
+                       'Journal Title', 'MeSH Terms', 'Other Term',
+                       'Other Term Owner', 'Place of Publication', 'PMID',
+                       'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
                        'Journal Article', 'Case Reports', 'Clinical Trial',
                        'Comparative Study', 'Letter', 'Meta-Analysis', 'Review']
     df = df[columns_to_keep]
@@ -1007,7 +1010,7 @@ def pubmed_search(gene_name, email):
             neuro = False
             chemistry = False
             for k in i:
-                if 'Neurodege' in k or 'Alzheimer' in k or 'Dementia' in k or 'Parkinson' in k:
+                if 'neurodege' in k.lower() or 'alzheimer' in k.lower() or 'dementia' in k.lower() or 'parkinson' in k.lower():
                     neuro = True
                 if '*' in k:
                     major.append(k)
@@ -1720,6 +1723,17 @@ def get_single_excel(target_id):
         WHERE C.target_id='%s'
         AND B.operator!='>' AND B.operator!='<'
         AND A.confidence_score>=8""" % target_id
+        query_commercials = """SELECT
+   smiles,
+   affinity_type,
+   ' =' as op,
+   affinity_value,
+   affinity_unit,
+   price,
+   website
+FROM purchasable_compounds
+WHERE target_id='%s'""" % target_id
+
         res_bio = dbase.get(query_bioactives)
         res_pockets = dbase.get(query_pockets)
         res_alt_pockets = dbase.get(query_alt_pockets)
@@ -1741,6 +1755,7 @@ def get_single_excel(target_id):
         res_disease = dbase.get(query_disease)
         res_reactome = dbase.get(query_reactome)
         res_kegg = dbase.get(query_kegg)
+        res_commercials = dbase.get(query_commercials)
         dbase.close()
 
         sequence = None
@@ -1751,17 +1766,18 @@ def get_single_excel(target_id):
             if res_gen_info:
                 pubmed = pubmed_search(res_gen_info[0]['Gene_name'], args.email)
         if not pubmed.empty:
-            col_order = ['Title', 'Journal Title','Year of Publication', 'Journal Article', 'Case Reports',
+            col_order = ['Title', 'Journal Title', 'Year of Publication', 'Journal Article', 'Case Reports',
                          'Clinical Trial', 'Comparative Study', 'Letter', 'Meta-Analysis', 'Review',
-                         'Neurodegeneration', 'Chemistry', 'Major Keywords','Abstract', 'Author', 'Affiliation',  'PMID',  'MeSH Terms', 'Other Term']
+                         'Neurodegeneration', 'Chemistry', 'Major Keywords', 'Abstract', 'Author', 'Affiliation',
+                         'PMID', 'MeSH Terms', 'Other Term']
             pubmed = pubmed[col_order]
-            pubmed.sort_values(by='Year of Publication',ascending=False,inplace=True)
+            pubmed.sort_values(by='Year of Publication', ascending=False, inplace=True)
             pubmed.to_excel(writer, sheet_name='References', index=False)
         if res_gen_info:
             search_term = res_gen_info[0]['Gene_name']
             opentarget = open_target_association(search_term)
         if not opentarget.empty:
-            opentarget.to_excel(writer,sheet_name='open_target_association',index=False)
+            opentarget.to_excel(writer, sheet_name='open_target_association', index=False)
         if res_gen_info:
             # GENERAL INFO HEADER
             header_index = {'Gene_name': (0, 0), 'Synonyms': (1, 0), 'Target_id': (2, 0), 'Protein_class': (3, 0),
@@ -1845,7 +1861,7 @@ def get_single_excel(target_id):
                     wb_disease.write(row, col, v)
             wb_disease.conditional_format(1, 1, row, 1, {'type': 'data_bar'})
             wb_disease.conditional_format(1, 2, row, 2,
-                                      {'type': 'icon_set', 'reverse_icons': True, 'icon_style': '3_traffic_lights'})
+                                          {'type': 'icon_set', 'reverse_icons': True, 'icon_style': '3_traffic_lights'})
         if res_gwas:
             dis_header_index = {'DISEASE REGULATION': (0, 0, 0, 4), 'GWAS': (0, 6, 0, 11), 'disease': (1, 0),
                                 't_stat': (1, 1),
@@ -2125,14 +2141,15 @@ def get_single_excel(target_id):
             col_orig = 6
             row = 0
             wb_struct.merge_range(row, col_orig, row, col_orig + 7, 'PDB', col_header)
-            wb_struct.merge_range(row, col_orig+8, row, col_orig + 14, 'PDB: Ligand', col_header)
+            wb_struct.merge_range(row, col_orig + 8, row, col_orig + 14, 'PDB: Ligand', col_header)
             row += 1
 
             pdb = pd.DataFrame.from_records(res_pdb)
             pdb['% of full protein'] = round((pdb['n_residues'] / len(sequence)) * 100, 1)
-            pdb.operator=' '+pdb.operator
+            pdb.operator = ' ' + pdb.operator
             col_order = ['PDB_code', 'Technique', 'Resolution', 'Chain', 'Domain_name',
-                         'n_residues', '% of full protein','start_stop', 'type_of_binder', 'binding_type', 'operator', 'value', 'units',
+                         'n_residues', '% of full protein', 'start_stop', 'type_of_binder', 'binding_type', 'operator',
+                         'value', 'units',
                          'Ligand_name', 'publication_year']
             pdb = pdb[col_order]
             pdb.to_excel(writer, sheet_name='Structure', startrow=row, startcol=col_orig, index=False)
@@ -2158,17 +2175,19 @@ def get_single_excel(target_id):
         if res_bio:
             conc = re.compile(r'(?:of|at)\s(\d+\.*\d*)\s?((?:u|n)M)')
             bioactivity_types = ['Binding', 'Functionnal']
-            percent = ['Activity', 'Residual activity', 'Residual_activity','Residual Activity', 'Inhibition']
-            percent_invert = ['Activity', 'Residual activity','Residual Activity', 'Residual_activity']
-            binding_affinity = ['Ki','Kd']
+            percent = ['Activity', 'Residual activity', 'Residual_activity', 'Residual Activity', 'Inhibition']
+            percent_invert = ['Activity', 'Residual activity', 'Residual Activity', 'Residual_activity']
+            binding_affinity = ['Ki', 'Kd']
             dose_response_type = ['IC50', 'EC50', 'Potency']
 
             header_groups = {'Bioactivity info': (0, 9), 'Assay info': (10, 14), 'Structure': (15, 15),
                              'Ligand properties': (16, 30), 'Ligand info': (31, 36), 'References': (37, 38)}
 
-            col = ['lig_id','standard_type', 'operator', 'value_num', 'units', 'pX', 'Conc', 'Conc_units', 'activity_comment',
+            col = ['lig_id', 'standard_type', 'operator', 'value_num', 'units', 'pX', 'Conc', 'Conc_units',
+                   'activity_comment',
                    'data_validity_comment',
-                   'bioactivity_type', 'assay_species', 'assay_description', 'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD',
+                   'bioactivity_type', 'assay_species', 'assay_description', 'confidence_score', 'assay_id', 'SMILES',
+                   'HBA', 'HBD',
                    'LogD', 'LogP', 'MW', 'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
                    'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class',
                    'class_def', 'max_phase', 'oral', 'assay_ref', 'ref_bio']
@@ -2186,14 +2205,14 @@ def get_single_excel(target_id):
             bioactives = bioactives[col]
             bioactives.operator = ' ' + bioactives.operator
 
-
             percent_bio = bioactives[
                 (bioactives['units'] == '%') & (bioactives['standard_type'].isin(percent)) & (
                     bioactives['bioactivity_type'].isin(bioactivity_types))].copy()
 
             for key in percent_invert:
                 percent_bio.loc[percent_bio['standard_type'] == key, 'value_num'] = 100 - percent_bio['value_num']
-                percent_bio.loc[percent_bio['standard_type'] == key, 'standard_type'] = '100 - ' + percent_bio['standard_type']
+                percent_bio.loc[percent_bio['standard_type'] == key, 'standard_type'] = '100 - ' + percent_bio[
+                    'standard_type']
             percent_bio = percent_bio[(percent_bio['value_num'] > 50)]
             percent_bio.sort_values(by='value_num', ascending=False, inplace=True)
             efficacy_bio = bioactives[
@@ -2207,16 +2226,17 @@ def get_single_excel(target_id):
             ADME = bioactives[(bioactives['bioactivity_type'] == 'ADME')].copy()
             ADME.sort_values(by='assay_description', inplace=True)
             other = bioactives[~(bioactives['standard_type'].isin(
-                ['Emax', 'Efficacy', 'Activity', 'Residual activity', 'Residual_activity','Residual Activity', 'Inhibition', 'IC50', 'Ki',
+                ['Emax', 'Efficacy', 'Activity', 'Residual activity', 'Residual_activity', 'Residual Activity',
+                 'Inhibition', 'IC50', 'Ki',
                  'EC50', 'Kd', 'Potency'])) & ~(bioactives['bioactivity_type'] == 'ADME')].copy()
             other.sort_values(by=['standard_type', 'assay_description'], inplace=True)
             dose_response = bioactives[
                 (bioactives['units'] == 'nM') & (bioactives['standard_type'].isin(dose_response_type)) & (
                     bioactives['bioactivity_type'].isin(bioactivity_types))].copy()
             dose_response = dose_response[dose_response.value_num <= 1000]
-            dose_response.sort_values(by=['standard_type','value_num'], inplace=True)
+            dose_response.sort_values(by=['standard_type', 'value_num'], inplace=True)
             dose_response['pX'].fillna(-np.log10(dose_response.value_num / 1000000000),
-                                                       inplace=True)
+                                       inplace=True)
 
             binding = bioactives[
                 (bioactives['units'] == 'nM') & (bioactives['standard_type'].isin(binding_affinity)) & (
@@ -2264,7 +2284,8 @@ def get_single_excel(target_id):
 
                 col_order = ['lig_id', 'standard_type', 'operator', 'value_num', 'units', 'pX', 'Selectivity',
                              'number of other targets',
-                             'targets name', 'activity_comment', 'bioactivity_type', 'assay_species', 'assay_description',
+                             'targets name', 'activity_comment', 'bioactivity_type', 'assay_species',
+                             'assay_description',
                              'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD', 'LogD', 'LogP', 'MW',
                              'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
                              'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species',
@@ -2272,58 +2293,55 @@ def get_single_excel(target_id):
                              'ref_bio']
                 binding = binding[col_order]
 
-
             CNS_MPO_criteria = [{'criteria': '>=', 'type': 'number', 'value': 4.5},
                                 {'criteria': '>=', 'type': 'number', 'value': 3.5},
                                 {'criteria': '<', 'type': 'number', 'value': 3}]
             CNS_MPO_col = 'AE1:AE'
 
-
             if not binding.empty:
-                binding.to_excel(writer, sheet_name='Binding',startrow=1,index=False)
+                binding.to_excel(writer, sheet_name='Binding', startrow=1, index=False)
                 w_bd = writer.sheets['Binding']
                 for head, span in header_groups.items():
                     if span[0] == span[1]:
-                        w_bd.write(0,span[0],head,col_header)
+                        w_bd.write(0, span[0], head, col_header)
                     else:
-                        w_bd.merge_range(0,span[0],0,span[1],head,col_header)
+                        w_bd.merge_range(0, span[0], 0, span[1], head, col_header)
                 w_bd.conditional_format(CNS_MPO_col + (str(len(binding) + 3)),
                                         {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                             , 'icons': CNS_MPO_criteria})
 
-
             if not dose_response.empty:
-                dose_response.to_excel(writer, sheet_name='Dose_response',startrow=1,index=False)
+                dose_response.to_excel(writer, sheet_name='Dose_response', startrow=1, index=False)
                 w_dr = writer.sheets['Dose_response']
                 for head, span in header_groups.items():
                     if span[0] == span[1]:
-                        w_dr.write(0,span[0],head,col_header)
+                        w_dr.write(0, span[0], head, col_header)
                     else:
-                        w_dr.merge_range(0,span[0],0,span[1],head,col_header)
+                        w_dr.merge_range(0, span[0], 0, span[1], head, col_header)
                 w_dr.conditional_format(CNS_MPO_col + (str(len(dose_response) + 3)),
                                         {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                             , 'icons': CNS_MPO_criteria})
 
             if not percent_bio.empty:
-                percent_bio.to_excel(writer, sheet_name='Percent_inhibition',startrow=1,index=False)
+                percent_bio.to_excel(writer, sheet_name='Percent_inhibition', startrow=1, index=False)
                 w_per = writer.sheets['Percent_inhibition']
                 for head, span in header_groups.items():
                     if span[0] == span[1]:
-                        w_per.write(0,span[0],head,col_header)
+                        w_per.write(0, span[0], head, col_header)
                     else:
-                        w_per.merge_range(0,span[0],0,span[1],head,col_header)
-                w_per.conditional_format(CNS_MPO_col+ (str(len(percent_bio) + 3)),
+                        w_per.merge_range(0, span[0], 0, span[1], head, col_header)
+                w_per.conditional_format(CNS_MPO_col + (str(len(percent_bio) + 3)),
                                          {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                              , 'icons': CNS_MPO_criteria})
 
             if not efficacy_bio.empty:
-                efficacy_bio.to_excel(writer, sheet_name='Emax_Efficacy',startrow=1,index=False)
+                efficacy_bio.to_excel(writer, sheet_name='Emax_Efficacy', startrow=1, index=False)
                 w_eff = writer.sheets['Emax_Efficacy']
                 for head, span in header_groups.items():
                     if span[0] == span[1]:
-                        w_eff.write(0,span[0],head,col_header)
+                        w_eff.write(0, span[0], head, col_header)
                     else:
-                        w_eff.merge_range(0,span[0],0,span[1],head,col_header)
+                        w_eff.merge_range(0, span[0], 0, span[1], head, col_header)
                 w_eff.conditional_format(CNS_MPO_col + (str(len(efficacy_bio) + 3)),
                                          {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                              , 'icons': CNS_MPO_criteria})
@@ -2331,41 +2349,46 @@ def get_single_excel(target_id):
             else:
                 row_efficacy = 0
             if not emax.empty:
-                emax.to_excel(writer, sheet_name='Emax_Efficacy', startrow=row_efficacy+1,index=False)
+                emax.to_excel(writer, sheet_name='Emax_Efficacy', startrow=row_efficacy + 1, index=False)
                 w_eff = writer.sheets['Emax_Efficacy']
                 for head, span in header_groups.items():
                     if span[0] == span[1]:
-                        w_eff.write(row_efficacy,span[0],head,col_header)
+                        w_eff.write(row_efficacy, span[0], head, col_header)
                     else:
-                        w_eff.merge_range(row_efficacy,span[0],row_efficacy,span[1],head,col_header)
+                        w_eff.merge_range(row_efficacy, span[0], row_efficacy, span[1], head, col_header)
                 w_eff.conditional_format(CNS_MPO_col + (str(len(emax) + row_efficacy + 3)),
                                          {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                              , 'icons': CNS_MPO_criteria})
 
             if not ADME.empty:
-                ADME.to_excel(writer, sheet_name='ADME',startrow=1,index=False)
+                ADME.to_excel(writer, sheet_name='ADME', startrow=1, index=False)
                 w_adme = writer.sheets['ADME']
                 for head, span in header_groups.items():
                     if span[0] == span[1]:
-                        w_adme.write(0,span[0],head,col_header)
+                        w_adme.write(0, span[0], head, col_header)
                     else:
-                        w_adme.merge_range(0,span[0],0,span[1],head,col_header)
+                        w_adme.merge_range(0, span[0], 0, span[1], head, col_header)
                 w_adme.conditional_format(CNS_MPO_col + (str(len(ADME) + 3)),
                                           {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                               , 'icons': CNS_MPO_criteria})
 
             if not other.empty:
-                other.to_excel(writer, sheet_name='Other_bioactivities',startrow=1,index=False)
+                other.to_excel(writer, sheet_name='Other_bioactivities', startrow=1, index=False)
                 w_other = writer.sheets['Other_bioactivities']
                 for head, span in header_groups.items():
                     if span[0] == span[1]:
-                        w_other.write(0,span[0],head,col_header)
+                        w_other.write(0, span[0], head, col_header)
                     else:
-                        w_other.merge_range(0,span[0],0,span[1],head,col_header)
+                        w_other.merge_range(0, span[0], 0, span[1], head, col_header)
                 w_other.conditional_format(CNS_MPO_col + (str(len(other) + 3)),
                                            {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                                , 'icons': CNS_MPO_criteria})
-
+        if res_commercials:
+            col_order = ['smiles','affinity_type','op','affinity_value','affinity_unit','price','website']
+            comm = pd.DataFrame.from_records(res_commercials)
+            comm.sort_values(by='affinity_value',inplace=True)
+            comm = comm[col_order]
+            comm.to_excel(writer, sheet_name='Commercial compounds',index=False)
         workbook.close()
     else:
         return print("Gene with ID [", target_id, '] not present in the database. Run the command without the -R flag '
@@ -2374,86 +2397,78 @@ def get_single_excel(target_id):
 
 def get_list_excel(list_targets):
     list_to_do = {}
-    not_in_db = []
+    not_in_db = {'Not present in DB':[]}
     for g in list_targets:
+        in_db = False
+        if '_' in g:
+            g = g.split('_')[0]
         for entry in gene_in_db:
             if g.upper() == entry['name'].upper():
-                list_to_do[entry['name']] = entry['ID']
+                list_to_do[entry['ID']] = g
+                in_db = True
                 continue
             elif g.upper() in entry['syn']:
-                list_to_do[entry['name']] = entry['ID']
+                list_to_do[entry['ID']] = g
+                in_db = True
                 continue
-        if g not in list_to_do.keys():
-            not_in_db.append(g)
+        if not in_db:
+            not_in_db['Not present in DB'].append(g)
     if not list_to_do:
         return print("No genes that you entered are in the Database")
 
-    query_list = '('
-    for k, v in list_to_do.items():
-        query_list += "'" + v + "',"
-    query_list = query_list.rstrip(',') + ')'
+    not_in_db = pd.DataFrame.from_dict(not_in_db)
+    pubmed = {'ID':[],'total # publications':[],'number of inflammation publications':[]}
+    for id,name in list_to_do.items():
+        pubmed['ID'].append(id)
+        pubmed['number of inflammation publications'].append(pubmed_search(name,args.email,return_number=True,mesh_term='Inflammation'))
+        pubmed['total # publications'].append(pubmed_search(name, args.email, return_number=True))
+        #TODO: Mesh term is hard-coded here
+    pubmed = pd.DataFrame.from_dict(pubmed)
+
     dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-    query = """SELECT T.Gene_name
-      ,T.Target_id as Uniprot_id
-      ,T.Species
-      ,(CASE WHEN T.Number_isoforms=0 THEN 1 ELSE T.Number_isoforms END) Number_isoforms
-      ,T.Protein_class_desc
-      ,T.Protein_class_short
-      ,T.Synonyms
-      ,LENGTH(T.Sequence) as number_of_residues
-      ,D.domain
-      ,M.MUTANT
-      ,V.VARIANT
-      ,P.PDB
-      ,B.protein_blast
-      ,PDB_BLAST.pdb_blast
-      ,POCK.pockets
-      ,BIO.Number_of_ligands
-      ,BIO.Max_phase
-      ,A.BIO_TYPE AS Assay_types
-      ,G.gwas
-      ,ALT_POCK.alt_pockets
-      ,D_EXP.disease_up as upregulated_in_disease
-      ,D_EXP.disease_down as downregulated_in_disease
-      ,T_EXP.tissue_up as overexpressed_in
-      ,T_EXP.tissue_down as underexpressed_in
-      ,PATH.pathways
-      ,PHEN.genotypes
-      ,PHEN.lethal_phenotype
-      ,PHEN.normal_genotype AS normal_phenotype_for
-      ,DIS.disease
-      ,PROT_SEL.max_organ
-      ,ROUND(PROT_SEL.Selectivity_entropy,3) AS expression_selectivity
-      ,PROT_ATLAS.summary AS protein_atlas_expression
+
+    gene_ids = "','".join(list_to_do.keys())
+
+    query_gen = """SELECT
+T.Gene_name
+,T.Target_id as Uniprot_id
+,T.Target_id as ID
+,T.Species
+,(CASE WHEN T.Number_isoforms=0 THEN 1 ELSE T.Number_isoforms END) Number_isoforms
+,T.Protein_class_desc
+,T.Protein_class_short
+,T.Synonyms
+,LENGTH(T.Sequence) as number_of_residues
 FROM Targets T
-  LEFT JOIN (SELECT
-    D.Target_id,
+WHERE Target_id in ('%s')""" % gene_ids
+    query_domains = """SELECT
+ D.Target_id ID,
  GROUP_CONCAT(D.domain SEPARATOR '\n') AS domain
   FROM
 (SELECT
    D.Target_id
   ,CONCAT(D.source_name,'\n',GROUP_CONCAT(CONCAT('\t',D.Domain_name,' (',D.Domain_start,'-',D.Domain_stop,')') ORDER BY D.Domain_start SEPARATOR '\n')) as domain
 FROM Domain_targets D
+  WHERE D.Target_id in ('%s')
     GROUP BY D.Target_id,D.source_name) D
-GROUP BY D.Target_id) D
-  ON T.Target_id=D.Target_id
-  LEFT JOIN (SELECT
-  Target_id,
+GROUP BY D.Target_id""" % gene_ids
+    query_mutant = """SELECT
+  Target_id ID,
   GROUP_CONCAT(CONCAT('(',start,') ',previous,'-->',new,' comment: ',SUBSTRING_INDEX(comment,'.',1),'; in domains: ',domains) ORDER BY start SEPARATOR '\n') as MUTANT
   FROM modifications
     WHERE mod_type ='MUTAGEN'
-GROUP BY Target_id) M
-    ON T.Target_id=M.Target_id
-    LEFT JOIN (SELECT
-  Target_id,
+    AND Target_id in ('%s')
+GROUP BY Target_id""" % gene_ids
+    query_variant = """SELECT
+  Target_id ID,
   concat(substring_index(GROUP_CONCAT(CONCAT('(',start,') ',previous,'-->',new,' comment: ',SUBSTRING_INDEX(comment,'.',1),'; in domains: ',domains) ORDER BY start SEPARATOR '\n'),'\n',15),case when count(comment) > 15 THEN  concat('\n+ ',count(comment)-15,' others') ELSE '' END)  as VARIANT
   FROM modifications
     WHERE mod_type = 'VAR'
-GROUP BY Target_id) V
-    ON T.Target_id=V.Target_id
-  LEFT JOIN (SELECT
-  T.Target_id,
-  concat(substring_index(GROUP_CONCAT(CONCAT(T.PDB_code,': ',T.n_residues,' residues (',T.start_stop,', ',T.P_seq,'%) Chain(s): ',T.Chain,' Domain(s): ',CASE WHEN T.domain is NULL THEN '' ELSE T.domain END,' (',T.Technique,': ',T.Resolution,')') ORDER BY T.P_seq DESC SEPARATOR '\n'),'\n',15),case when count(T.PDB_code) > 15 THEN  concat('\n+ ',count(T.PDB_code)-15,' others') ELSE '' END) AS PDB
+    AND Target_id in ('%s')
+GROUP BY Target_id""" % gene_ids
+    query_pdb = """SELECT
+  T.Target_id ID,
+  concat(substring_index(GROUP_CONCAT(CONCAT(T.PDB_code,': ',T.n_residues,' residues (',T.start_stop,', ',T.P_seq,'%%) Chain(s): ',T.Chain,' Domain(s): ',CASE WHEN T.domain is NULL THEN '' ELSE T.domain END,' (',T.Technique,': ',T.Resolution,')') ORDER BY T.P_seq DESC SEPARATOR '\n'),'\n',15),case when count(T.PDB_code) > 15 THEN  concat('\n+ ',count(T.PDB_code)-15,' others') ELSE '' END) AS PDB
   FROM
   (SELECT
   C.Target_id,
@@ -2467,7 +2482,7 @@ GROUP BY Target_id) V
   DT.Domain_name,
   P.Technique,
   P.Resolution
-  FROM PDB_Chains C
+  FROM (SELECT * FROM PDB_Chains C WHERE C.Target_id in ('%s')) C
 LEFT JOIN PDB P
     ON C.PDB_code=P.PDB_code
 LEFT JOIN PDBChain_Domain D
@@ -2476,29 +2491,27 @@ LEFT JOIN Domain_targets DT
     ON D.Domain_id=DT.domain_id
 LEFT JOIN Targets T
     ON C.Target_id = T.Target_id
-GROUP BY C.Target_id,C.PDB_code
-  )T
-    GROUP BY T.Target_id) P
-  ON T.Target_id=P.Target_id
-  LEFT JOIN (SELECT
-  Query_target_id as target_id,
-concat(substring_index(GROUP_CONCAT(CONCAT(Hit_gene_name,'_',Hit_gene_species,' (',similarity,'%)') ORDER BY similarity DESC SEPARATOR '\n'),'\n',10),case when count(Hit_gene_name) > 10 THEN  concat('\n+ ',count(Hit_gene_name)-10,' others') ELSE '' END) as protein_blast
+GROUP BY C.Target_id,C.PDB_code)T
+    GROUP BY T.Target_id""" % gene_ids
+    query_blast = """SELECT
+  Query_target_id as ID,
+concat(substring_index(GROUP_CONCAT(CONCAT(Hit_gene_name,'_',Hit_gene_species,' (',similarity,'%%)') ORDER BY similarity DESC SEPARATOR '\n'),'\n',10),case when count(Hit_gene_name) > 10 THEN  concat('\n+ ',count(Hit_gene_name)-10,' others') ELSE '' END) as protein_blast
   FROM protein_blast
-GROUP BY Query_target_id) B
-  ON T.Target_id=B.Target_id
-  LEFT JOIN (SELECT
-  Query_target_id as target_id,
-concat(substring_index(GROUP_CONCAT(CONCAT(Hit_PDB_code,' Chain: ',Chain_Letter,' (',Hit_gene_name,'_',Hit_gene_species,' - ',similarity,'%)') ORDER BY similarity DESC SEPARATOR '\n'),'\n',10),case when count(Hit_gene_name) > 10 THEN  concat('\n+ ',count(Hit_gene_name)-10,' others') ELSE '' END) as pdb_blast
+    WHERE Query_target_id in ('%s')
+GROUP BY Query_target_id""" % gene_ids
+    query_pdbblast = """SELECT
+  Query_target_id as ID,
+concat(substring_index(GROUP_CONCAT(CONCAT(Hit_PDB_code,' Chain: ',Chain_Letter,' (',Hit_gene_name,'_',Hit_gene_species,' - ',similarity,'%%)') ORDER BY similarity DESC SEPARATOR '\n'),'\n',10),case when count(Hit_gene_name) > 10 THEN  concat('\n+ ',count(Hit_gene_name)-10,' others') ELSE '' END) as pdb_blast
   FROM `3D_Blast`
-GROUP BY Query_target_id) PDB_BLAST
-  ON T.Target_id=PDB_BLAST.Target_id
-  LEFT JOIN (SELECT
-  P.Target_id,
+    WHERE Query_target_id in ('%s')
+GROUP BY Query_target_id""" % gene_ids
+    query_pockets = """SELECT
+  P.Target_id ID,
   GROUP_CONCAT(P.pockets_domains SEPARATOR '\n') pockets
 FROM
 (SELECT
   POCK.Target_id,
-  CONCAT(POCK.Domain_name,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',POCK.PDB_code,': Druggability_score=',POCK.DrugScore,' Volume=',POCK.volume,' Area=',POCK.total_sasa,' (',POCK.Fraction_apolar,'% apolar)(',POCK.Pocket_number,')')ORDER BY POCK.DrugScore DESC SEPARATOR '\n'),'\n',3),case when count(POCK.Pocket_number) > 3 THEN  concat('\n\t+ ',count(POCK.Pocket_number)-3,' others') ELSE '' END)) AS pockets_domains
+  CONCAT(POCK.Domain_name,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',POCK.PDB_code,': Druggability_score=',POCK.DrugScore,' Volume=',POCK.volume,' Area=',POCK.total_sasa,' (',POCK.Fraction_apolar,'%% apolar)(',POCK.Pocket_number,')')ORDER BY POCK.DrugScore DESC SEPARATOR '\n'),'\n',3),case when count(POCK.Pocket_number) > 3 THEN  concat('\n\t+ ',count(POCK.Pocket_number)-3,' others') ELSE '' END)) AS pockets_domains
   FROM
 (SELECT T1.*,
   (CASE WHEN T1.Domain_id='other' THEN 'other' WHEN T1.Domain_id is NULL THEN 'other' ELSE D.Domain_name END) Domain_name
@@ -2514,21 +2527,20 @@ FROM
   FP.volume,
   FPD.Domain_id
   FROM (SELECT * FROM fPockets WHERE druggable='TRUE'
-  AND blast='FALSE')FP
+  AND blast='FALSE' AND Target_id in ('%s'))FP
   LEFT JOIN fPockets_Domain FPD
     ON FP.Pocket_id=FPD.Pocket_id
 ) T1
 LEFT JOIN Domain_targets D
     ON T1.Domain_id=D.domain_id) POCK
 GROUP BY POCK.Target_id,POCK.Domain_name) P
-GROUP BY P.Target_id) POCK
-  ON T.Target_id=POCK.Target_id
-  LEFT JOIN (SELECT
-  ALT_POCK.Target_id,
+GROUP BY P.Target_id""" % gene_ids
+    query_altpockets = """SELECT
+  ALT_POCK.Target_id ID,
   GROUP_CONCAT(ALT_POCK.pocket_gene_name SEPARATOR '\n') alt_pockets
 FROM
 (SELECT POCK.Target_id,
-    CONCAT(POCK.Hit_gene_name,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',POCK.PDB_code,'(Similarity=',ROUND(POCK.similarity),'%): Druggability_score=',ROUND(POCK.DrugScore,2),' Volume=',ROUND(POCK.volume,1),' Area=',ROUND(POCK.total_sasa,1),' (',ROUND(POCK.Fraction_apolar),'% apolar)(',POCK.Pocket_number,')')ORDER BY POCK.similarity DESC,POCK.DrugScore DESC SEPARATOR '\n'),'\n',3),case when count(POCK.Pocket_number) > 3 THEN  concat('\n\t+ ',count(POCK.Pocket_number)-3,' others') ELSE '' END)) AS pocket_gene_name
+    CONCAT(POCK.Hit_gene_name,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',POCK.PDB_code,'(Similarity=',ROUND(POCK.similarity),'%%): Druggability_score=',ROUND(POCK.DrugScore,2),' Volume=',ROUND(POCK.volume,1),' Area=',ROUND(POCK.total_sasa,1),' (',ROUND(POCK.Fraction_apolar),'%% apolar)(',POCK.Pocket_number,')')ORDER BY POCK.similarity DESC,POCK.DrugScore DESC SEPARATOR '\n'),'\n',3),case when count(POCK.Pocket_number) > 3 THEN  concat('\n\t+ ',count(POCK.Pocket_number)-3,' others') ELSE '' END)) AS pocket_gene_name
 FROM
 (SELECT
   FP.Target_id,
@@ -2542,20 +2554,16 @@ FROM
   3D.Hit_PDB_code,
   3D.Hit_gene_name,
   3D.similarity
-  FROM fPockets FP
+  FROM (SELECT * FROM fPockets WHERE Target_id in ('%s') AND druggable='TRUE' AND blast='TRUE') FP
     LEFT JOIN 3D_Blast 3D
     ON 3D.Query_target_id=FP.Target_id AND 3D.Hit_PDB_code=FP.PDB_code
-  WHERE
-   FP.druggable='TRUE'
-  AND blast='TRUE'
-  AND 3D.similarity>=70) POCK
+  WHERE 3D.similarity>=70) POCK
 GROUP BY POCK.Target_id,POCK.Hit_gene_name) ALT_POCK
-GROUP BY ALT_POCK.Target_id) ALT_POCK
-  ON T.Target_id=ALT_POCK.Target_id
-  LEFT JOIN (SELECT
-  T1.Target_id,
-  concat(substring_index(GROUP_CONCAT(CASE WHEN T1.up is null THEN null ELSE CONCAT(T1.up,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END))END ORDER BY T1.t_stat DESC SEPARATOR '\n'),'\n',20),case when count(T1.up) > 20 THEN  concat('\n+ ',count(T1.up)-20,' others') ELSE '' END) AS disease_up
-,  concat(substring_index(GROUP_CONCAT(CASE WHEN T1.down is null THEN null ELSE CONCAT(T1.down,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END))END ORDER BY T1.t_stat SEPARATOR '\n'),'\n',20),case when count(T1.down) > 20 THEN  concat('\n+ ',count(T1.down)-20,' others') ELSE '' END) AS disease_down
+GROUP BY ALT_POCK.Target_id""" % gene_ids
+    query_disease_expression = """SELECT
+  T1.Target_id ID,
+  concat(substring_index(GROUP_CONCAT(CASE WHEN T1.up is null THEN null ELSE CONCAT(T1.up,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END))END ORDER BY T1.t_stat DESC SEPARATOR '\n'),'\n',20),case when count(T1.up) > 20 THEN  concat('\n+ ',count(T1.up)-20,' others') ELSE '' END) AS upregulated_in_disease
+,  concat(substring_index(GROUP_CONCAT(CASE WHEN T1.down is null THEN null ELSE CONCAT(T1.down,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END))END ORDER BY T1.t_stat SEPARATOR '\n'),'\n',20),case when count(T1.down) > 20 THEN  concat('\n+ ',count(T1.down)-20,' others') ELSE '' END) AS downregulated_in_disease
 
 FROM
     (SELECT *,
@@ -2570,15 +2578,15 @@ FROM
   Target_id
   FROM diff_exp_disease
     WHERE t_stat > 5 or t_stat < -5
+    AND Target_id in ('%s')
   GROUP BY Target_id,disease
   ) T1
     ) T1
-GROUP BY T1.Target_id) D_EXP
-  ON T.Target_id=D_EXP.Target_id
-  LEFT JOIN (SELECT
-  T1.Target_id,
-  GROUP_CONCAT(CASE WHEN T1.up is null THEN null ELSE CONCAT(T1.up,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END)) END ORDER BY T1.t_stat DESC SEPARATOR '\n') AS tissue_up,
-  GROUP_CONCAT(CASE WHEN T1.down is null THEN null ELSE CONCAT(T1.down,' (T-stat= ',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END)) END ORDER BY T1.t_stat SEPARATOR '\n') AS tissue_down
+GROUP BY T1.Target_id""" % gene_ids
+    query_tissue_expression = """SELECT
+  T1.Target_id ID,
+  GROUP_CONCAT(CASE WHEN T1.up is null THEN null ELSE CONCAT(T1.up,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END)) END ORDER BY T1.t_stat DESC SEPARATOR '\n') AS overexpressed_in,
+  GROUP_CONCAT(CASE WHEN T1.down is null THEN null ELSE CONCAT(T1.down,' (T-stat= ',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END)) END ORDER BY T1.t_stat SEPARATOR '\n') AS underexpressed_in
   FROM
 ( SELECT
   Tissue,
@@ -2590,33 +2598,32 @@ GROUP BY T1.Target_id) D_EXP
   (CASE WHEN t_stat>=0 THEN Tissue END) AS up
 FROM diff_exp_tissue
 WHERE t_stat > 5 or t_stat < -5
+  AND Target_id in ('%s')
 GROUP BY Target_id,Tissue)T1
-GROUP BY T1.Target_id) T_EXP
-  ON T.Target_id=T_EXP.Target_id
-  LEFT JOIN (SELECT
-  P.Target_id,
+GROUP BY T1.Target_id""" % gene_ids
+    query_pathways = """SELECT
+  P.Target_id ID,
   GROUP_CONCAT(P.pathways SEPARATOR '\n') AS pathways
   FROM
 (SELECT
   Target_id,
   CONCAT(pathway_dataset,'\n',GROUP_CONCAT(CONCAT('\t',pathway_name) ORDER BY pathway_name SEPARATOR '\n')) AS pathways
   FROM pathways
-    WHERE pathway_dataset='KEGG pathways data set'
+    WHERE pathway_dataset='KEGG pathways data set' AND Target_id in ('%s')
 GROUP BY Target_id,pathway_dataset) P
-GROUP BY P.Target_id) PATH
-  ON T.Target_id=PATH.Target_id
-  LEFT JOIN (SELECT
-  T1.Target_id,
+GROUP BY P.Target_id""" % gene_ids
+    query_phenotypes = """SELECT
+  T1.Target_id ID,
   GROUP_CONCAT(genotype_list ORDER BY T1.zygosity SEPARATOR '\n') AS genotypes,
   GROUP_CONCAT(T1.lethal_phenotype SEPARATOR '\n') lethal_phenotype
-  ,GROUP_CONCAT(T1.normal_genotype SEPARATOR '\n') normal_genotype
+  ,GROUP_CONCAT(T1.normal_genotype SEPARATOR '\n') normal_phenotype_for
   FROM
 (SELECT
  T1.Target_id,
   T1.zygosity,
   CONCAT(' [',T1.zygosity,']\n',GROUP_CONCAT(CONCAT('\t',T1.normal_genotype) SEPARATOR '\n')) as normal_genotype,
   CONCAT(' [',T1.genotype,']\n',GROUP_CONCAT(DISTINCT CONCAT('\t',T1.lethal_phen) SEPARATOR '\n')) as lethal_phenotype,
-  CONCAT(T1.zygosity,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',T1.genotype,' [',T1.organism,']',(CASE WHEN T1.phen_list like 'no abnormal phenotype detected' THEN ' [NORMAL PHENOTYPE]' WHEN T1.phen_list like '%lethal%' THEN ' [LETHAL PHENOTYPE OBSERVED]' ELSE '[P]' END)) ORDER BY T1.genotype SEPARATOR '\n'),'\n',5),case when count(T1.genotype) > 5 THEN  concat('\n\t+ ',count(T1.genotype)-5,' others') ELSE '' END)) as genotype_list
+  CONCAT(T1.zygosity,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',T1.genotype,' [',T1.organism,']',(CASE WHEN T1.phen_list like 'no abnormal phenotype detected' THEN ' [NORMAL PHENOTYPE]' WHEN T1.phen_list like '%%lethal%%' THEN ' [LETHAL PHENOTYPE OBSERVED]' ELSE '[P]' END)) ORDER BY T1.genotype SEPARATOR '\n'),'\n',5),case when count(T1.genotype) > 5 THEN  concat('\n\t+ ',count(T1.genotype)-5,' others') ELSE '' END)) as genotype_list
   FROM
 (SELECT
   PHEN.Target_id,
@@ -2624,23 +2631,26 @@ GROUP BY P.Target_id) PATH
   (CASE WHEN PHEN.zygosity is NULL THEN 'not declared' ELSE PHEN.zygosity END) zygosity,
   PHEN.organism,
   GROUP_CONCAT(DISTINCT PHEN.Phenotype SEPARATOR ' ; ') AS phen_list,
-  GROUP_CONCAT(DISTINCT (CASE WHEN PHEN.Phenotype like '%lethal%' THEN PHEN.Phenotype END) SEPARATOR '\n\t') AS lethal_phen,
+  GROUP_CONCAT(DISTINCT (CASE WHEN PHEN.Phenotype like '%%lethal%%' THEN PHEN.Phenotype END) SEPARATOR '\n\t') AS lethal_phen,
   GROUP_CONCAT(DISTINCT (CASE WHEN PHEN.Phenotype like 'no abnormal phenotype detected' THEN PHEN.genotype END) SEPARATOR '\n') AS normal_genotype
  FROM phenotype PHEN
+   WHERE Target_id in ('%s')
     GROUP BY PHEN.Target_id,PHEN.genotype,PHEN.zygosity)T1
 GROUP BY T1.Target_id,T1.zygosity)T1
-GROUP BY T1.Target_id) PHEN
-  ON T.Target_id=PHEN.Target_id
-  LEFT JOIN (SELECT
-  Target_id,
+GROUP BY T1.Target_id""" % gene_ids
+    query_diseases = """SELECT
+  Target_id ID,
   GROUP_CONCAT(CONCAT(disease_name,' [',disease_id,']') ORDER BY disease_name SEPARATOR '\n') AS disease
   FROM disease
-GROUP BY Target_id) DIS
-  ON T.Target_id=DIS.Target_id
-  LEFT JOIN protein_expression_selectivity PROT_SEL
-  ON T.Target_id=PROT_SEL.Target_id
-  LEFT JOIN (SELECT
-  T1.Target_id,
+    WHERE Target_id in ('%s')
+GROUP BY Target_id""" % gene_ids
+    query_protexpression_sel = """SELECT PROT_SEL.Target_id ID
+      ,PROT_SEL.max_organ
+      ,ROUND(PROT_SEL.Selectivity_entropy,3) AS expression_selectivity
+  FROM protein_expression_selectivity PROT_SEL
+WHERE PROT_SEL.Target_id in ('%s')""" % gene_ids
+    query_protAtlas = """SELECT
+  T1.Target_id ID,
   GROUP_CONCAT(CONCAT(T1.level_graph,(CASE
                        WHEN 15-T1.n_cell = 0 THEN ''
                        WHEN 15-T1.n_cell = 1 THEN '      '
@@ -2659,7 +2669,7 @@ GROUP BY Target_id) DIS
                        WHEN 15-T1.n_cell = 14 THEN '                                                                                    '
                        WHEN 15-T1.n_cell = 15 THEN '                                                                                          '
 
-                       END),'\t',T1.organ,' (',ROUND(T1.avg_level_num,1),')') ORDER BY T1.avg_level_num DESC SEPARATOR '\n') AS summary
+                       END),'\t',T1.organ,' (',ROUND(T1.avg_level_num,1),')') ORDER BY T1.avg_level_num DESC SEPARATOR '\n') AS protein_atlas_expression
   FROM
 (SELECT
   T1.Target_id,
@@ -2676,60 +2686,80 @@ GROUP BY Target_id) DIS
     T1.cell,
     CASE WHEN value=0 THEN '[ -]' WHEN value=1 THEN '[1]' WHEN value=2 THEN '[2]' WHEN value=3 THEN '[3]' END AS level_graph,
     T1.value AS level_numeric
-  FROM protein_expression_levels T1) T1
+  FROM protein_expression_levels T1
+  WHERE T1.Target_id in ('%s')) T1
 GROUP BY T1.Target_id,T1.organ)T1
-GROUP BY T1.Target_id) PROT_ATLAS
-  ON T.Target_id=PROT_ATLAS.Target_id
-  LEFT JOIN (SELECT
-    C.target_id,
+GROUP BY T1.Target_id""" % gene_ids
+    query_bioactivities = """SELECT
+    B.ID,
     COUNT(DISTINCT L.lig_id) AS Number_of_ligands,
     MAX(L.max_phase) AS Max_phase
-    FROM bioactivities B
-    INNER JOIN (SELECT * FROM Crossref C WHERE C.target_id in """ + query_list + """) C
-    on B.Target_id=C.Chembl_id
+    FROM
+    (SELECT B.*,C.target_id as ID FROM bioactivities B
+    INNER JOIN (SELECT * FROM Crossref C WHERE C.target_id in ('%s')) C
+    on B.Target_id=C.Chembl_id) B
     LEFT JOIN ligands L
     on B.lig_id=L.lig_id
-    GROUP BY C.target_id) BIO
-  ON T.Target_id=BIO.target_id
-  LEFT JOIN (SELECT
-  AT.target_id,
-  GROUP_CONCAT(DISTINCT A.bioactivity_type ORDER BY A.bioactivity_type SEPARATOR '\n') AS BIO_TYPE
-  FROM assay_target AT
+    GROUP BY B.target_id""" % gene_ids
+    query_assays = """SELECT
+  AT.target_id ID,
+  GROUP_CONCAT(DISTINCT A.bioactivity_type ORDER BY A.bioactivity_type SEPARATOR '\n') AS Assay_types
+  FROM (SELECT * FROM assay_target AT WHERE AT.target_id in ('%s')) AT
   LEFT JOIN assays A
     ON A.assay_id=AT.assay_id
-GROUP BY AT.target_id) A
-  ON T.Target_id=A.target_id
-  LEFT JOIN(SELECT
-   G.Target_id
+GROUP BY AT.target_id""" % gene_ids
+    query_gwas = """SELECT
+   G.Target_id ID
   ,GROUP_CONCAT(CONCAT('Phenotype: ',G.phenotype,' Organism: ',G.organism,' (',G.first_author,'-',G.publication_year,') doi:',G.doi,' PID:',G.pubmed_id) ORDER BY G.phenotype,G.publication_year DESC SEPARATOR '\n') as gwas
 FROM gwas G
-    GROUP BY G.Target_id) G
-  ON T.Target_id=G.Target_id
-WHERE T.Target_id in """ + query_list
-    res = dbase.get(query)
+  WHERE G.Target_id in ('%s')
+    GROUP BY G.Target_id""" % gene_ids
+    query_commercial = """SELECT
+   target_id ID,
+   GROUP_CONCAT(CONCAT('Affinity: ',affinity_type,': ',affinity_value,affinity_unit,' (price: ',price,') (website: ',website,')') SEPARATOR '\n') as commercially_available
+FROM purchasable_compounds
+WHERE target_id in ('%s') AND affinity_value <= 500
+GROUP BY target_id""" % gene_ids
+
+    all = pd.DataFrame.from_records(dbase.get(query_gen))
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_domains)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_mutant)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_variant)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_pdb)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_blast)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_pdbblast)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_pockets)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_altpockets)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_disease_expression)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_tissue_expression)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_pathways)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_phenotypes)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_diseases)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_protexpression_sel)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_protAtlas)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_bioactivities)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_assays)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_gwas)),on='ID',how='left')
+    all = all.merge(pd.DataFrame.from_records(dbase.get(query_commercial)),on='ID',how='left')
+    all = all.merge(pubmed,on='ID',how='left')
+
+
     dbase.close()
     header = ['Gene_name', 'Uniprot_id', 'Synonyms', 'Species', 'pathways', 'disease', 'upregulated_in_disease',
-              'downregulated_in_disease', 'gwas',
-              'genotypes', 'lethal_phenotype', 'normal_phenotype_for', 'overexpressed_in', 'underexpressed_in',
-              'protein_atlas_expression', 'max_organ',
-              'expression_selectivity', 'Number_isoforms', 'Protein_class_desc', 'Protein_class_short',
-              'number_of_residues', 'domain', 'MUTANT', 'VARIANT', 'PDB', 'pdb_blast', 'protein_blast', 'pockets',
-              'alt_pockets', 'Number_of_ligands', 'Max_phase', 'Assay_types']
-    header_index = {header[i]: i for i in range(len(header))}
-
+              'downregulated_in_disease', 'gwas','genotypes', 'lethal_phenotype', 'normal_phenotype_for',
+              'overexpressed_in', 'underexpressed_in','protein_atlas_expression', 'max_organ','expression_selectivity',
+              'Number_isoforms', 'Protein_class_desc','Protein_class_short','number_of_residues', 'domain', 'MUTANT',
+              'VARIANT', 'PDB', 'pdb_blast','protein_blast', 'pockets','alt_pockets', 'Number_of_ligands',
+              'commercially_available', 'Max_phase','Assay_types','total # publications'
+              ,'number of inflammation publications']
+    all = all[header]
     t = time.strftime("%d%b%Y_%H%M%S")
-    workbook = xlsxwriter.Workbook(output_lists_path + 'Export_' + str(len(res)) + '_entries_' + t + '.xlsx')
-    worksheet = workbook.add_worksheet('Druggability_list')
-    bold = workbook.add_format({'bold': True})
-    for k, v in header_index.items():
-        worksheet.write(0, v, k, bold)
-    row_counter = 1
-    for entry in res:
-        for k, v in entry.items():
-            worksheet.write(row_counter, header_index[k], v)
-        row_counter += 1
-    workbook.close()
-    print("[EXPORT]: Excel file: ", '[Export_' + t + '.xlsx]', ' successfully generated')
+    writer = pd.ExcelWriter(output_lists_path + 'Export_' + str(len(all)) + '_entries_' + t + '.xlsx',
+                            engine='xlsxwriter')
+    all.to_excel(writer,'Druggability_list',index=False)
+    not_in_db.to_excel(writer,'Not in DB',index=False)
+    writer.save()
+    print("[EXPORT]: Excel file: ", '[Export_' + str(len(all)) + '_entries_' + t + '.xlsx]', ' successfully generated')
     return "Success"
 
 
