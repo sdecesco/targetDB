@@ -214,7 +214,6 @@ class ProteinExpression:
                 if id:
                     doc = get_xml(id)
             if doc:
-                pd.DataFrame.from_records()
                 self.protein_lvl = get_protein_level_tissue(doc)
                 if self.protein_lvl:
                     self.protein_lvl['Cells'] = sorted(self.protein_lvl['Cells'],

@@ -14,7 +14,7 @@ try:
 except NameError:
     pass
 
-import sys, os, mygene, requests, xlsxwriter, subprocess, re
+import sys, os, mygene, requests, subprocess, re
 from Bio import ExPASy, Entrez, Medline
 from Bio import SwissProt
 from intermine.webservice import Service
@@ -1448,7 +1448,7 @@ def write_to_db(target, db_name):
 
 def get_single_excel(target_id):
     if target_id in list_of_entries:
-        writer = pd.ExcelWriter(output_single_path + list_of_entries[target_id] + '_' + target_id  + '.xlsx',
+        writer = pd.ExcelWriter(output_single_path + list_of_entries[target_id] + '_' + target_id + '.xlsx',
                                 engine='xlsxwriter')
 
         workbook = writer.book
@@ -1609,9 +1609,14 @@ def get_single_excel(target_id):
           Chain_Letter as Chain,
           similarity,
           Hit_gene_name as gene,
-          Hit_gene_species as species
+          Hit_gene_species as species,
+          max(tractable) SITES_tractable,
+          max(druggable) SITES_druggable
         FROM 3D_Blast
+          LEFT JOIN drugEbility_sites DS
+          ON DS.pdb_code=Hit_PDB_code
         WHERE Query_target_id='%s'
+        GROUP BY Hit_PDB_code
         ORDER BY similarity DESC""" % target_id
         query_pdb = """SELECT
           C.PDB_code,
@@ -1627,7 +1632,9 @@ def get_single_excel(target_id):
           B.binding_value 'value',
           B.binding_units units,
           B.lig_name Ligand_name,
-          B.pub_year publication_year
+          B.pub_year publication_year,
+          max(DS.tractable) SITES_tractable,
+          max(DS.druggable) SITES_druggable
 
         FROM PDB_Chains C
           LEFT JOIN PDB P
@@ -1638,6 +1645,8 @@ def get_single_excel(target_id):
             ON Domain.Domain_id = D.domain_id
           LEFT JOIN pdb_bind B
             ON B.pdb_code = C.PDB_code
+          LEFT JOIN drugEbility_sites DS
+            ON DS.pdb_code = C.PDB_code
         WHERE C.Target_id='%s'
         GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % target_id
         query_pockets = """SELECT
@@ -1733,6 +1742,57 @@ def get_single_excel(target_id):
    website
 FROM purchasable_compounds
 WHERE target_id='%s'""" % target_id
+        query_bindingDB = """SELECT
+          B.ligand_name,
+          B.ZincID,
+          B.`IC50(nM)`,
+          B.`EC50(nM)`,
+          B.`Ki(nM)`,
+          B.`Kd(nM)`,
+          B.`kon(M-1s-1)`,
+          B.`koff(s-1)`,
+          B.pH,
+          B.`Temp`,
+          B.Source,
+          B.DOI,
+          B.institution,
+          B.patent_number,
+          L.mol_name,
+          L.max_phase,
+          L.oral,
+          L.indication_class,
+          L.class_def,
+          L.alogp as aLogP,
+          L.acd_logd as LogD,
+          L.acd_logp as LogP,
+          L.acd_most_apka as apKa,
+          L.acd_most_bpka as bpKa,
+          L.HBA,
+          L.HBD,
+          L.TPSA,
+          L.molecularWeight as MW,
+          L.rotatableBonds as rotB,
+          L.n_Ar_rings as nAr,
+          L.n_alerts as n_alerts,
+          L.molecular_species,
+          L.num_ro5_violations as ro5_violations,
+          L.ro3_pass as pass_ro3,
+          B.ligand_smiles as SMILES
+        FROM BindingDB B
+          LEFT JOIN ligands L
+          ON B.inchi_key = L.std_inchi_key
+        WHERE target_id = '%s'""" % target_id
+        query_domain_drugE = """SELECT
+  GROUP_CONCAT(DISTINCT UPPER(pdb_code) SEPARATOR ',') pdb_list,
+  domain_fold,
+  domain_superfamily,
+max(tractable) tractable,
+  max(druggable) druggable
+FROM drugEbility_domains
+WHERE pdb_code in (SELECT DISTINCT PDB_code
+  FROM PDB_Chains
+WHERE target_id = '%s')
+GROUP BY domain_fold""" % target_id
 
         res_bio = dbase.get(query_bioactives)
         res_pockets = dbase.get(query_pockets)
@@ -1756,6 +1816,8 @@ WHERE target_id='%s'""" % target_id
         res_reactome = dbase.get(query_reactome)
         res_kegg = dbase.get(query_kegg)
         res_commercials = dbase.get(query_commercials)
+        res_bindingDB = dbase.get(query_bindingDB)
+        res_domain_drugE = dbase.get(query_domain_drugE)
         dbase.close()
 
         sequence = None
@@ -2129,19 +2191,28 @@ WHERE target_id='%s'""" % target_id
             col_order = ['Domain_name', 'start', 'stop', 'length', 'source']
             dom = dom[col_order]
             dom.to_excel(writer, sheet_name='Structure', startrow=row, index=False)
-            row += len(dom) + 1
+            row += len(dom) + 2
+        if res_domain_drugE:
+            wb_struct.merge_range(row, col_orig, row, col_orig + 4, 'DOMAINS - DrugEbillity', col_header)
+            row += 1
+            drugE = pd.DataFrame.from_records(res_domain_drugE)
+            col_order = ['pdb_list', 'domain_fold', 'domain_superfamily', 'tractable', 'druggable']
+            drugE = drugE[col_order]
+            drugE.to_excel(writer, sheet_name='Structure', startrow=row, index=False)
+            row += len(drugE) + 2
         if res_pdb_blast:
-            wb_struct.merge_range(row, col_orig, row, col_orig + 4, 'PDB BLAST', col_header)
+            wb_struct.merge_range(row, col_orig, row, col_orig + 6, 'PDB BLAST', col_header)
             row += 1
             blast = pd.DataFrame.from_records(res_pdb_blast)
-            col_order = ['PDB_code', 'Chain', 'similarity', 'gene', 'species']
+            col_order = ['PDB_code', 'Chain', 'similarity', 'gene', 'species', 'SITES_tractable', 'SITES_druggable']
             blast = blast[col_order]
             blast.to_excel(writer, sheet_name='Structure', startrow=row, index=False)
         if res_pdb:
-            col_orig = 6
+            col_orig = 8
             row = 0
             wb_struct.merge_range(row, col_orig, row, col_orig + 7, 'PDB', col_header)
             wb_struct.merge_range(row, col_orig + 8, row, col_orig + 14, 'PDB: Ligand', col_header)
+            wb_struct.merge_range(row, col_orig + 15, row, col_orig + 16, 'ChEMBL - DruggEbillity', col_header)
             row += 1
 
             pdb = pd.DataFrame.from_records(res_pdb)
@@ -2150,7 +2221,7 @@ WHERE target_id='%s'""" % target_id
             col_order = ['PDB_code', 'Technique', 'Resolution', 'Chain', 'Domain_name',
                          'n_residues', '% of full protein', 'start_stop', 'type_of_binder', 'binding_type', 'operator',
                          'value', 'units',
-                         'Ligand_name', 'publication_year']
+                         'Ligand_name', 'publication_year', 'SITES_tractable', 'SITES_druggable']
             pdb = pdb[col_order]
             pdb.to_excel(writer, sheet_name='Structure', startrow=row, startcol=col_orig, index=False)
         col_alt_pocket = 0
@@ -2383,6 +2454,31 @@ WHERE target_id='%s'""" % target_id
                 w_other.conditional_format(CNS_MPO_col + (str(len(other) + 3)),
                                            {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                                , 'icons': CNS_MPO_criteria})
+        if res_bindingDB:
+            bdb = pd.DataFrame.from_records(res_bindingDB)
+            columns = ['ZincID', 'IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)', 'pH', 'Temp',
+                       'Source', 'DOI', 'patent_number', 'institution', 'ligand_name', 'SMILES', 'HBA', 'HBD', 'LogD',
+                       'LogP', 'MW', 'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3', 'ro5_violations',
+                       'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class', 'class_def', 'max_phase',
+                       'oral']
+            bdb = bdb[((bdb[['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']] <= 10000) & (
+                bdb[['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']].notna())).any(axis=1)]
+            bdb.loc[(bdb[['LogP', 'LogD', 'MW', 'HBD', 'TPSA']].notnull().all(axis=1)) & (
+                bdb.bpKa.isnull()), 'bpKa'] = 0
+            bdb['CNS_MPO'] = mpo.calc_mpo_score(bpka=bdb['bpKa'], logP=bdb['LogP'], logD=bdb['LogD'], MW=bdb['MW'],
+                                                HBD=bdb['HBD'], TPSA=bdb['TPSA'])
+            if not bdb.empty:
+                bdb = bdb[columns]
+                bdb.to_excel(writer, sheet_name='BindingDB', index=False)
+                w_bindingDB = writer.sheets['BindingDB']
+                CNS_MPO_criteria = [{'criteria': '>=', 'type': 'number', 'value': 4.5},
+                                    {'criteria': '>=', 'type': 'number', 'value': 3.5},
+                                    {'criteria': '<', 'type': 'number', 'value': 3}]
+                CNS_MPO_col = 'AD1:AD'
+                w_bindingDB.conditional_format(CNS_MPO_col + (str(len(bdb) + 3)),
+                                               {'type': 'icon_set', 'icon_style': '3_traffic_lights'
+                                                   , 'icons': CNS_MPO_criteria})
+
         if res_commercials:
             col_order = ['smiles', 'affinity_type', 'op', 'affinity_value', 'affinity_unit', 'price', 'website']
             comm = pd.DataFrame.from_records(res_commercials)
@@ -2417,11 +2513,11 @@ def get_list_excel(list_targets):
         return print("No genes that you entered are in the Database")
 
     not_in_db = pd.DataFrame.from_dict(not_in_db)
-    pubmed = {'ID': [], 'total # publications': [], 'number of inflammation publications': []}
+    pubmed = {'ID': [], 'total # publications': [], 'number of Dementia publications': []}
     for id, name in list_to_do.items():
         pubmed['ID'].append(id)
-        pubmed['number of inflammation publications'].append(
-            pubmed_search(name, args.email, return_number=True, mesh_term='Inflammation'))
+        pubmed['number of Dementia publications'].append(
+            pubmed_search(name, args.email, return_number=True, mesh_term='Dementia'))
         pubmed['total # publications'].append(pubmed_search(name, args.email, return_number=True))
         # TODO: Mesh term is hard-coded here
     pubmed = pd.DataFrame.from_dict(pubmed)
@@ -2723,15 +2819,16 @@ WHERE target_id in ('%s') AND affinity_value <= 500
 GROUP BY target_id""" % gene_ids
                     }
 
-    results = {qname:pd.read_sql(query,con=dbase.db) for qname,query in list_queries.items()}
+    results = {qname: pd.read_sql(query, con=dbase.db) for qname, query in list_queries.items()}
 
     if not results['gen'].empty:
         all = pd.DataFrame.from_records(results['gen'])
     else:
-        print("[EXPORT ERROR]: Something went wrong during the export process \nYour requested genes might not be present in the database, or the database is not available at the moment\nPlease try again later")
+        print(
+            "[EXPORT ERROR]: Something went wrong during the export process \nYour requested genes might not be present in the database, or the database is not available at the moment\nPlease try again later")
         return "Failure"
 
-    for name,res in results.items():
+    for name, res in results.items():
         if name == 'gen':
             continue
         else:
@@ -2746,7 +2843,7 @@ GROUP BY target_id""" % gene_ids
               'Number_isoforms', 'Protein_class_desc', 'Protein_class_short', 'number_of_residues', 'domain', 'MUTANT',
               'VARIANT', 'PDB', 'pdb_blast', 'protein_blast', 'pockets', 'alt_pockets', 'Number_of_ligands',
               'commercially_available', 'Max_phase', 'Assay_types', 'total # publications'
-        , 'number of inflammation publications']
+        , 'number of Dementia publications']
     all = all[header]
     t = time.strftime("%d%b%Y_%H%M%S")
     writer = pd.ExcelWriter(output_lists_path + 'Export_' + str(len(all)) + '_entries_' + t + '.xlsx',
