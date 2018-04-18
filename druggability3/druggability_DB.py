@@ -742,8 +742,9 @@ def get_bioactivity(lig_to_do):
             res_bioactivity += dbase.get(query_bioactivity)
             counter = 0
             lig_str = ''
-
-    if counter < 1000:
+    if counter == 0:
+        pass
+    elif counter < 1000:
         lig_str = lig_str.rstrip(',')
         query_bioactivity = "SELECT EXP.chembl_id AS assay_id,TD.chembl_id AS Target_id,TD.target_type AS target_type," \
                             "TD.pref_name AS target_name,TD.organism AS target_organism, MOL.chembl_id AS " \
