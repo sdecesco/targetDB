@@ -184,17 +184,18 @@ def get_druggable_pockets(list_of_pockets):
     """Get a dict of PDB with a dict of Pockets object as entry, output a list of druggable pockets"""
     new_dict = {}
     for k in list_of_pockets.keys():
-        new_dict[k]={}
+        new_dict[k] = {}
         for p in list_of_pockets[k].keys():
             if list_of_pockets[k][p].druggable == 'TRUE':
-                new_dict[k][p]=list_of_pockets[k][p]
-    key_to_del=[]
+                new_dict[k][p] = list_of_pockets[k][p]
+    key_to_del = []
     for k in new_dict.keys():
         if not new_dict[k]:
             key_to_del.append(k)
     for k in key_to_del:
         new_dict.pop(k)
     return new_dict
+
 
 def show_pockets(pocket_dict):
     """get a pocket_dict from the get_pockets() function"""
@@ -259,8 +260,8 @@ class Pockets:
             self.chain_coverage = {}
             self.part_of_domain = []
         if float(self.param['druggability_score']) >= 0.5 and (
-            float(self.param['apolar_sasa']) / float(self.param['total_sasa'])) > 0.5 and float(
-                self.param['volume']) >= 250.0 and float(self.param['total_sasa']) >= 50.0:
+                float(self.param['apolar_sasa']) / float(self.param['total_sasa'])) > 0.5 and float(
+            self.param['volume']) >= 250.0 and float(self.param['total_sasa']) >= 50.0:
             self.druggable = 'TRUE'
 
     def show(self):
@@ -312,8 +313,13 @@ class Pockets:
                 if k in pdb_info['Chain']:
                     count += len(self.chain_coverage[k])
             try:
-                self.part_of_domain.append(
-                    {'domain': 'other', 'coverage': round((count / pdb_info['length']) * 100, 0), 'domain_id': 'other'})
+                if pdb_info['length'] == 0:
+                    self.part_of_domain.append(
+                        {'domain': 'other', 'coverage': '', 'domain_id': 'other'})
+                else:
+                    self.part_of_domain.append(
+                        {'domain': 'other', 'coverage': round((count / pdb_info['length']) * 100, 0),
+                         'domain_id': 'other'})
             except KeyError:
                 self.part_of_domain.append(
                     {'domain': 'other', 'coverage': '', 'domain_id': 'other'})
