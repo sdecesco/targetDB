@@ -81,5 +81,5 @@ def calc_mpo_score(bpka=None,logP=None,logD=None,MW=None,HBD=None,TPSA=None):
     MW_score = monotonic_score(MW, 360, 500)
     HBD_score = monotonic_score(HBD, 0.5, 3.5)
     TPSA_score = hump_score(TPSA, 20, 40, 90, 120)
-    return round(bpKa_score + logP_score + logD_score + MW_score + HBD_score + TPSA_score,2)
+    return bpKa_score + logP_score + logD_score + MW_score + HBD_score + TPSA_score
 

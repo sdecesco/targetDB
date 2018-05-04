@@ -33,8 +33,11 @@ import numpy as np
 import scipy.stats as sc
 from druggability3 import cns_mpo as mpo
 from druggability3 import drugg_errors
+from druggability3 import target_descriptors as td
 
 # ===================# SETTING UP PATHS #============================#
+
+#TODO: Path to be stored in a config file in a more generic location (e.g. ~/druggability_data/...)
 
 dbase_file_path = '/data/sdecesco/databases/druggability/'
 output_lists_path = '/data/sdecesco/databases/druggability/outputs/lists/'
@@ -1493,7 +1496,7 @@ def get_single_excel(target_id):
 
         dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
         query_gen_info = "SELECT * FROM Targets WHERE Target_id='" + target_id + "'"
-        query_disease = "SELECT disease_name,disease_id FROM disease WHERE Target_id='" + target_id + "'"
+        query_disease = "SELECT Target_id,disease_name,disease_id FROM disease WHERE Target_id='" + target_id + "'"
         query_reactome = "SELECT pathway_name FROM pathways WHERE pathway_dataset='Reactome pathways data set' AND Target_id='" + target_id + "'"
         query_kegg = "SELECT pathway_name FROM pathways WHERE pathway_dataset='KEGG pathways data set' AND Target_id='" + target_id + "'"
         query_disease_exp = """SELECT
@@ -1689,6 +1692,7 @@ def get_single_excel(target_id):
         query_bioactives = """SELECT
         B.lig_id,
           B.assay_id,
+          B.target_id,
           B.standard_type,
           B.operator,
           B.value_num,
@@ -1871,6 +1875,11 @@ GROUP BY domain_fold""" % target_id
                     else:
                         col = col + 1
                         wb_general_info.write(row, col, v, wrap)
+            target_desc = td.get_descriptors(target_id,user=args.db_username,pwd=args.db_password)
+            target_score = td.make_score(target_desc)
+            spider_plot = td.make_spider_plot(target_score.loc[0].values,target_score.columns,target_name=res_gen_info[0]['Gene_name'])
+            wb_general_info.insert_image('G1', 'spider_plot', {'image_data': spider_plot})
+
         if res_disease:
             header_index = {'Gene_name': (0, 0), 'Synonyms': (1, 0), 'Target_id': (2, 0), 'Protein_class': (3, 0),
                             'Protein_class_desc': (4, 0), 'Species': (5, 0), 'Number_isoforms': (6, 0),
@@ -1991,14 +2000,14 @@ GROUP BY domain_fold""" % target_id
                     wb_expression.write(row, col, v)
             wb_expression.conditional_format(3, 8, row, 8, {'type': 'data_bar'})
 
-            organ_chart = workbook.add_chart({'type': 'bar'})
-            organ_chart.add_series({'values': '=expression!$I$4:$I$16',
-                                    'categories': '=expression!$F$4:$F$16',
-                                    'name': 'Organ Expression'})
-            organ_chart.set_legend({'none': True})
-            organ_chart.set_x_axis({'min': 0, 'max': 3, 'major_unit': 1, 'minor_unit_type': 'level',
-                                    'major_gridlines': {'visible': True, 'line': {'width': 1.25, 'dash_type': 'dash'}}})
-            wb_general_info.insert_chart('G1', organ_chart)
+            # organ_chart = workbook.add_chart({'type': 'bar'})
+            # organ_chart.add_series({'values': '=expression!$I$4:$I$16',
+            #                         'categories': '=expression!$F$4:$F$16',
+            #                         'name': 'Organ Expression'})
+            # organ_chart.set_legend({'none': True})
+            # organ_chart.set_x_axis({'min': 0, 'max': 3, 'major_unit': 1, 'minor_unit_type': 'level',
+            #                         'major_gridlines': {'visible': True, 'line': {'width': 1.25, 'dash_type': 'dash'}}})
+            # wb_general_info.insert_chart('G1', organ_chart)
         if res_tissue_exp:
             previous_organ = ''
             row = 0
@@ -2024,14 +2033,14 @@ GROUP BY domain_fold""" % target_id
                 wb_expression.write(row, col, res_tissue_exp[i]['tissue'])
                 wb_expression.merge_range(row, col + 1, row, col + 2, res_tissue_exp[i]['cell'])
                 wb_expression.write(row, col + 3, res_tissue_exp[i]['value'])
-            brain_chart = workbook.add_chart({'type': 'bar'})
-            brain_chart.add_series({'values': '=expression!$N$3:$N$13',
-                                    'categories': '=expression!$K$3:$L$13',
-                                    'name': 'Brain Expression'})
-            brain_chart.set_legend({'none': True})
-            brain_chart.set_x_axis({'min': 0, 'max': 3, 'major_unit': 1, 'minor_unit_type': 'level',
-                                    'major_gridlines': {'visible': True, 'line': {'width': 1.25, 'dash_type': 'dash'}}})
-            wb_general_info.insert_chart('G17', brain_chart)
+            # brain_chart = workbook.add_chart({'type': 'bar'})
+            # brain_chart.add_series({'values': '=expression!$N$3:$N$13',
+            #                         'categories': '=expression!$K$3:$L$13',
+            #                         'name': 'Brain Expression'})
+            # brain_chart.set_legend({'none': True})
+            # brain_chart.set_x_axis({'min': 0, 'max': 3, 'major_unit': 1, 'minor_unit_type': 'level',
+            #                         'major_gridlines': {'visible': True, 'line': {'width': 1.25, 'dash_type': 'dash'}}})
+            # wb_general_info.insert_chart('G17', brain_chart)
         if res_phenotype:
             from itertools import groupby
             row = 0
@@ -2256,13 +2265,10 @@ GROUP BY domain_fold""" % target_id
                              'Ligand properties': (16, 30), 'Ligand info': (31, 36), 'References': (37, 38)}
 
             col = ['lig_id', 'standard_type', 'operator', 'value_num', 'units', 'pX', 'Conc', 'Conc_units',
-                   'activity_comment',
-                   'data_validity_comment',
-                   'bioactivity_type', 'assay_species', 'assay_description', 'confidence_score', 'assay_id', 'SMILES',
-                   'HBA', 'HBD',
-                   'LogD', 'LogP', 'MW', 'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
-                   'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class',
-                   'class_def', 'max_phase', 'oral', 'assay_ref', 'ref_bio']
+                   'activity_comment','data_validity_comment','bioactivity_type', 'assay_species', 'assay_description',
+                   'confidence_score', 'assay_id', 'SMILES','HBA', 'HBD','LogD', 'LogP', 'MW', 'TPSA', 'aLogP',
+                   'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3','ro5_violations', 'rotB', 'CNS_MPO', 'mol_name',
+                   'molecular_species', 'indication_class','class_def', 'max_phase', 'oral', 'assay_ref', 'ref_bio','target_id']
 
             bioactives = pd.DataFrame.from_records(res_bio)
 
@@ -2314,56 +2320,72 @@ GROUP BY domain_fold""" % target_id
                 (bioactives['units'] == 'nM') & (bioactives['standard_type'].isin(binding_affinity)) & (
                     bioactives['bioactivity_type'].isin(bioactivity_types))].copy()
             binding = binding[binding.value_num <= 1000]
-            binding.sort_values(by=['standard_type', 'value_num'], inplace=True)
-            binding['pX'].fillna(-np.log10(binding.value_num / 1000000000), inplace=True)
 
-            query_lig = "','".join(binding.lig_id.unique())
-            dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-            query = """SELECT
-                    B.lig_id,
-                    B.Target_id,
-                    B.target_name,
-                    ROUND(AVG(B.value_num),2) avg_value,
-                    ROUND(STDDEV(B.value_num),2) sttdev,
-                    COUNT(*) n_values
-                    FROM bioactivities B
-                      LEFT JOIN assays A
-                      ON B.assay_id=A.assay_id
-                    WHERE B.operator='=' 
-                      AND B.lig_id in ('%s')
-                      AND A.bioactivity_type='Binding'
-                      AND UPPER(B.standard_type) in ('KD','KI')
-                      AND B.data_validity_comment is NULL
-                      AND A.confidence_score>=8
-            GROUP BY B.lig_id,B.Target_id""" % query_lig
-            res_lig = dbase.get(query)
-            dbase.close()
+            if not binding.empty:
+                binding.sort_values(by=['standard_type', 'value_num'], inplace=True)
+                binding['pX'].fillna(-np.log10(binding.value_num / 1000000000), inplace=True)
 
-            entropies = []
-            binding_data = pd.DataFrame.from_records(res_lig)
-            if not binding_data.empty:
-                for name, group in binding_data.groupby('lig_id'):
-                    group = group[(group['sttdev'] < group['avg_value'])].copy()
-                    group['association'] = (1 / group.avg_value)
-                    group['association_prob'] = group.association / group.association.sum()
-                    entropies.append({'Selectivity': round(sc.entropy(group.association_prob), 2), 'lig_id': name,
-                                      'number of other targets': len(group),
-                                      'targets name': ' / '.join(np.unique(group['target_name'].values))})
+                query_lig = "','".join(binding.lig_id.unique())
+                dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
+                query = """SELECT
+                        B.lig_id,
+                        B.Target_id,
+                        B.target_name,
+                        ROUND(AVG(B.value_num),2) avg_value,
+                        ROUND(STDDEV(B.value_num),2) sttdev,
+                        COUNT(*) n_values
+                        FROM bioactivities B
+                          LEFT JOIN assays A
+                          ON B.assay_id=A.assay_id
+                        WHERE B.operator='=' 
+                          AND B.lig_id in ('%s')
+                          AND A.bioactivity_type='Binding'
+                          AND UPPER(B.standard_type) in ('KD','KI')
+                          AND B.data_validity_comment is NULL
+                          AND A.confidence_score>=8
+                GROUP BY B.lig_id,B.Target_id""" % query_lig
+                res_lig = dbase.get(query)
+                dbase.close()
 
-                entropy = pd.DataFrame(data=entropies)
+                entropies = []
+                binding_data = pd.DataFrame.from_records(res_lig)
+                best_target_id = binding.iloc[0]['target_id']
+                if not binding_data.empty:
+                    for name, group in binding_data.groupby('lig_id'):
+                        best_target = True
+                        group = group[(group['sttdev'] < group['avg_value'])].copy()
+                        if group.empty:
+                            continue
+                        group['association'] = (1 / group.avg_value)
+                        group['association_prob'] = group.association / group.association.sum()
+                        if len(group) > 1:
+                            if group.loc[group['association_prob'].idxmax()]['Target_id'] == best_target_id:
+                                best_target = True
+                                best_target_name = group.loc[group['association_prob'].idxmax()]['target_name']
+                            else:
+                                best_target = False
+                                best_target_name = group.loc[group['association_prob'].idxmax()]['target_name']
+                        else:
+                            best_target_name = group.iloc[0]['target_name']
+                        entropies.append({'Selectivity': round(sc.entropy(group.association_prob), 2), 'lig_id': name,
+                                          'number of other targets': len(group),
+                                          'targets name': ' / '.join(np.unique(group['target_name'].values)),
+                                          'best_target': best_target,'best_target_name':best_target_name})
 
-                binding = pd.merge(binding, entropy, on='lig_id')
+                    entropy = pd.DataFrame(data=entropies)
 
-                col_order = ['lig_id', 'standard_type', 'operator', 'value_num', 'units', 'pX', 'Selectivity',
-                             'number of other targets',
-                             'targets name', 'activity_comment', 'bioactivity_type', 'assay_species',
-                             'assay_description',
-                             'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD', 'LogD', 'LogP', 'MW',
-                             'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
-                             'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species',
-                             'indication_class', 'class_def', 'max_phase', 'oral', 'assay_ref',
-                             'ref_bio']
-                binding = binding[col_order]
+                    binding = pd.merge(binding, entropy, on='lig_id')
+
+                    col_order = ['lig_id', 'standard_type', 'operator', 'value_num', 'units', 'pX', 'Selectivity',
+                                 'number of other targets',
+                                 'best_target_name', 'activity_comment', 'bioactivity_type', 'assay_species',
+                                 'assay_description',
+                                 'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD', 'LogD', 'LogP', 'MW',
+                                 'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
+                                 'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species',
+                                 'indication_class', 'class_def', 'max_phase', 'oral', 'assay_ref',
+                                 'ref_bio']
+                    binding = binding[col_order]
 
             CNS_MPO_criteria = [{'criteria': '>=', 'type': 'number', 'value': 4.5},
                                 {'criteria': '>=', 'type': 'number', 'value': 3.5},
@@ -3155,8 +3177,14 @@ if __name__ == "__main__":
         if args.in_file:
             if os.path.exists(args.in_file):
                 with open(args.in_file, 'r') as gene_list:
-                    list_of_genes = gene_list.readlines()
-                gene_dict = gene_to_uniprotid(list_of_genes)
+                    if args.Uniprot_ID:
+                        gene_dict = {}
+                        for i in gene_list.readlines():
+                            i = i.rstrip('\n').split(',')
+                            gene_dict[i[1]] = i[0]
+                    else:
+                        list_of_genes = gene_list.readlines()
+                        gene_dict = gene_to_uniprotid(list_of_genes)
                 break
             else:
                 print('ERROR : file inputed as argument [-i] does not exist')

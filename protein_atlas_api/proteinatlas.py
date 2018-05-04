@@ -16,11 +16,10 @@ except ImportError:
 import xmltodict
 import numpy as np
 import progressbar
-from operator import attrgetter
 from operator import itemgetter
 import xlsxwriter
 import argparse
-import pandas as pd
+import time
 
 # FOR PROGRESSBAR
 widgets = [' [', progressbar.Timer(), '] ', progressbar.Bar(), ' [', progressbar.Percentage(), '] ', ' (',
@@ -49,6 +48,36 @@ for organ, tissues in sub_class.items():
         tissue_to_organ_dict[k] = organ
 
 
+class NetworkError(RuntimeError):
+    pass
+
+
+def retryer(max_retries=10, timeout=5):
+    def wraps(func):
+        request_exceptions = (
+            requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError,
+            requests.exceptions.HTTPError, urllib.URLError, urllib.HTTPError
+        )
+
+        def inner(*args, **kwargs):
+            for i in range(max_retries):
+                try:
+                    result = func(*args, **kwargs)
+                except request_exceptions:
+                    time.sleep(timeout * i)
+                    continue
+                else:
+                    return result
+            else:
+                raise NetworkError
+
+        return inner
+
+    return wraps
+
+
+@retryer(max_retries=10, timeout=10)
 def gene_name_to_ensemblid(gene_name, alt=False):
     base_url = "http://rest.ensembl.org/lookup/symbol/homo_sapiens/"
     if alt:
