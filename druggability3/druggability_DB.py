@@ -37,7 +37,7 @@ from druggability3 import target_descriptors as td
 
 # ===================# SETTING UP PATHS #============================#
 
-#TODO: Path to be stored in a config file in a more generic location (e.g. ~/druggability_data/...)
+# TODO: Path to be stored in a config file in a more generic location (e.g. ~/druggability_data/...)
 
 dbase_file_path = '/data/sdecesco/databases/druggability/'
 output_lists_path = '/data/sdecesco/databases/druggability/outputs/lists/'
@@ -133,6 +133,7 @@ def gene_to_uniprotid(list_of_gene_name):
     mg = mygene.MyGeneInfo()
     gene_id = {}
     request = mg.querymany(list_of_gene_name, scopes="symbol", fields=['uniprot'], species=9606, as_dataframe=True)
+    request.to_csv('list_genes_to_be_done.csv')
     request.dropna(axis=0, subset=['uniprot'], inplace=True)
     try:
         uniprot_dict = request['uniprot'].to_dict()
@@ -523,6 +524,9 @@ def align(sequence1, sequence2, end_gaps=True, print_align=False):
     seq1 = sequence1.replace('O', 'X').replace('U', 'X')
     seq2 = str(sequence2).replace('O', 'X').replace('U', 'X')
 
+    if len(seq1) > 5000 or len(seq2) > 5000:
+        return {'score': 0, 'identity': 'too long', 'gaps': 0}
+
     alignments = pairwise2.align.globalds(seq1, seq2, blosum62, -10, -0.5, one_alignment_only=True,
                                           penalize_end_gaps=(end_gaps, end_gaps))
     if not alignments:
@@ -589,34 +593,34 @@ def get_pdb_seq_info(pdb_list, domain, isoforms):
             continue
         seq = pdb_parser.get_sequence(keys, pdb_list[keys]['path'],
                                       pdb_list[keys]['Chain'], domain)
-        chain_done = []
-        for chain in seq.keys():
-            if seq[chain]['chain_name'] not in pdb_list[keys]['Chain']:
-                continue
-            for i in seq[chain]['equal']:
-                if i in chain_done:
-                    seq[chain]['aligned'] = seq[i]['aligned']
-                    chain_done.append(chain)
-                    break
-            if seq[chain]['aligned']:
-                continue
-            if isoforms:
-                max_score = 0
-                isoform_match = []
-                list_of_align = []
-                for variants in isoforms:
-                    partial_seq = ''.join(variants['seq_list'][seq[chain]['start'] - 1:seq[chain]['stop'] - 1])
-                    seq_align = align(partial_seq, seq[chain]['sequence'], end_gaps=False)
-                    if seq_align is None:
-                        continue
-                    if seq_align['score'] > max_score:
-                        max_score = seq_align['score']
-                    list_of_align.append((seq_align, variants['isoid']))
-                for item in list_of_align:
-                    if item[0]['score'] == max_score:
-                        isoform_match.append({'isoform': item[1], 'identity': item[0]['identity']})
-                seq[chain]['aligned'] = isoform_match
-                chain_done.append(chain)
+        # chain_done = []
+        # for chain in seq.keys():
+        #     if seq[chain]['chain_name'] not in pdb_list[keys]['Chain']:
+        #         continue
+        #     for i in seq[chain]['equal']:
+        #         if i in chain_done:
+        #             seq[chain]['aligned'] = seq[i]['aligned']
+        #             chain_done.append(chain)
+        #             break
+        #     if seq[chain]['aligned']:
+        #         continue
+        #     if isoforms:
+        #         max_score = 0
+        #         isoform_match = []
+        #         list_of_align = []
+        #         for variants in isoforms:
+        #             partial_seq = ''.join(variants['seq_list'][seq[chain]['start'] - 1:seq[chain]['stop'] - 1])
+        #             seq_align = align(partial_seq, seq[chain]['sequence'], end_gaps=False)
+        #             if seq_align is None:
+        #                 continue
+        #             if seq_align['score'] > max_score:
+        #                 max_score = seq_align['score']
+        #             list_of_align.append((seq_align, variants['isoid']))
+        #         for item in list_of_align:
+        #             if item[0]['score'] == max_score:
+        #                 isoform_match.append({'isoform': item[1], 'identity': item[0]['identity']})
+        #         seq[chain]['aligned'] = isoform_match
+        #         chain_done.append(chain)
         pdb_list[keys]['sequences'] = seq
         length = 0
         for chain in seq.keys():
@@ -979,6 +983,8 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
     pid = Entrez.read(protein_id)
     if return_number:
         return pid['Count']
+    if pid['Count'] == '0':
+        return pd.DataFrame()
     # handle = Entrez.elink(db='pubmed', dbfrom="gene", id=pid['IdList'][0], linkname="gene_pubmed")
     # rec = Entrez.read(handle)
     # pub_id = [i['Id'] for i in rec[0]['LinkSetDb'][0]['Link']]
@@ -1669,8 +1675,7 @@ def get_single_excel(target_id):
             ON Domain.Domain_id=D.domain_id
         WHERE F.Target_id='{target}'
         AND F.druggable='TRUE' AND F.blast='FALSE'
-        GROUP BY F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(
-            target=target_id)
+        GROUP BY F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(target=target_id)
         query_alt_pockets = """SELECT
           F.PDB_code,
           F.DrugScore as druggability_score,
@@ -1875,9 +1880,10 @@ GROUP BY domain_fold""" % target_id
                     else:
                         col = col + 1
                         wb_general_info.write(row, col, v, wrap)
-            target_desc = td.get_descriptors(target_id,user=args.db_username,pwd=args.db_password)
+            target_desc = td.get_descriptors(target_id, user=args.db_username, pwd=args.db_password)
             target_score = td.make_score(target_desc)
-            spider_plot = td.make_spider_plot(target_score.loc[0].values,target_score.columns,target_name=res_gen_info[0]['Gene_name'])
+            spider_plot = td.make_spider_plot(target_score.loc[0].values, target_score.columns,
+                                              target_name=res_gen_info[0]['Gene_name'])
             wb_general_info.insert_image('G1', 'spider_plot', {'image_data': spider_plot})
 
         if res_disease:
@@ -2265,10 +2271,12 @@ GROUP BY domain_fold""" % target_id
                              'Ligand properties': (16, 30), 'Ligand info': (31, 36), 'References': (37, 38)}
 
             col = ['lig_id', 'standard_type', 'operator', 'value_num', 'units', 'pX', 'Conc', 'Conc_units',
-                   'activity_comment','data_validity_comment','bioactivity_type', 'assay_species', 'assay_description',
-                   'confidence_score', 'assay_id', 'SMILES','HBA', 'HBD','LogD', 'LogP', 'MW', 'TPSA', 'aLogP',
-                   'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3','ro5_violations', 'rotB', 'CNS_MPO', 'mol_name',
-                   'molecular_species', 'indication_class','class_def', 'max_phase', 'oral', 'assay_ref', 'ref_bio','target_id']
+                   'activity_comment', 'data_validity_comment', 'bioactivity_type', 'assay_species',
+                   'assay_description',
+                   'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD', 'LogD', 'LogP', 'MW', 'TPSA', 'aLogP',
+                   'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3', 'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name',
+                   'molecular_species', 'indication_class', 'class_def', 'max_phase', 'oral', 'assay_ref', 'ref_bio',
+                   'target_id']
 
             bioactives = pd.DataFrame.from_records(res_bio)
 
@@ -2370,7 +2378,7 @@ GROUP BY domain_fold""" % target_id
                         entropies.append({'Selectivity': round(sc.entropy(group.association_prob), 2), 'lig_id': name,
                                           'number of other targets': len(group),
                                           'targets name': ' / '.join(np.unique(group['target_name'].values)),
-                                          'best_target': best_target,'best_target_name':best_target_name})
+                                          'best_target': best_target, 'best_target_name': best_target_name})
 
                     entropy = pd.DataFrame(data=entropies)
 
@@ -2477,6 +2485,7 @@ GROUP BY domain_fold""" % target_id
                 w_other.conditional_format(CNS_MPO_col + (str(len(other) + 3)),
                                            {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                                , 'icons': CNS_MPO_criteria})
+
         if res_bindingDB:
             bdb = pd.DataFrame.from_records(res_bindingDB)
             columns = ['ZincID', 'IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)', 'pH', 'Temp',
@@ -3211,6 +3220,14 @@ if __name__ == "__main__":
             parser.print_help()
             sys.exit()
 
+    if args.db_password and args.db_username:
+        db_pwd = args.db_password
+        db_user = args.db_username
+    else:
+        print("[ERROR]: Please provide username and password for the MySQL database (-db_user / -db_pwd)")
+        parser.print_help()
+        sys.exit()
+
     list_of_entries, gene_in_db = get_list_entries()
 
     if args.report_only:
@@ -3235,6 +3252,7 @@ if __name__ == "__main__":
             else:
                 status = get_target_info(key, value)
                 targets_list[key] = status
+
         if args.report_list or args.report_single:
             list_of_entries, gene_in_db = get_list_entries()
             if args.report_list:

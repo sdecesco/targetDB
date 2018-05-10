@@ -495,6 +495,9 @@ def get_descriptors(target_id,user=None,pwd=None):
     info = info[info['itype'].isin(col_to_keep)]
     info['value']=info['number_value'].fillna(0)+info['integer_value'].fillna(0)
     info = info.pivot(index='protein_id',columns='itype',values='value')
+    for col in col_to_keep:
+        if col not in info.columns:
+            info[col] = 0
     tcrd_data = tcrd_data.join(info)
 
     tcrd_res['patent'].index=tcrd_res['patent']['year']
@@ -602,7 +605,8 @@ def make_score(df):
     dflog2 = df2.copy()
     dfsqrt = df2.copy()
     dfsqrt = np.sqrt(dfsqrt)
-    dflog2 = np.log2(dflog2).replace(-np.inf, 0)
+    with np.errstate(divide='ignore'):
+        dflog2 = np.log2(dflog2).replace(-np.inf, 0)
     spider_score = df2.copy()
     spider_score.drop(spider_score.columns, axis=1, inplace=True)
     spider_score['ChEMBL'] = (dflog2['ChEMBL_bioactives_count'] + dflog2['ChEMBL_bioactives_great_selectivity_count'] +
