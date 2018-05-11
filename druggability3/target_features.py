@@ -317,9 +317,9 @@ def get_single_features(target_id, user=None, pwd=None):
 
 	if not results['bioactives'].empty:
 		results.update(transform_bioactivities(results['bioactives'],dbase))
-
-	return results
 	dbase.close()
+	return results
+
 
 
 def get_list_features(gene_ids, user=None, pwd=None):
