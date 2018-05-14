@@ -97,11 +97,29 @@ def get_pockets(path, sphere_size=3.0, pdb_info=None, domain=None, alternate=Fal
             pdb_parsed = parser.parse_header(pdb_code, f)
             pdb_strip_path = str(f).rstrip('.pdb') + '_strip.pdb'
         if pdb_parsed.biomolecules:
-            chain_to_keep = pdb_parsed.biomolecules['1']
+            chain_to_keep = []
+            if pdb_info:
+                for biomolecule,chains in pdb_parsed.biomolecules.items():
+                    if not chain_to_keep:
+                        for c in pdb_info[pdb_code]['Chain']:
+                            if c in chains:
+                                chain_to_keep = pdb_parsed.biomolecules[biomolecule]
+                                break
+            elif alternate_pdb:
+                for biomolecule,chains in pdb_parsed.biomolecules.items():
+                    if alternate_pdb[pdb_code]['chain_letter'] in chains:
+                        chain_to_keep = pdb_parsed.biomolecules[biomolecule]
+                        break
+            else:
+                chain_to_keep = []
+
             structure = Bioparser.get_structure(pdb_code, f)
             io.set_structure(structure[0])
-            chain_select = ChainSelect(chain_to_keep)
-            io.save(pdb_strip_path, chain_select)
+            if chain_to_keep:
+                chain_select = ChainSelect(chain_to_keep)
+                io.save(pdb_strip_path, chain_select)
+            else:
+                io.save(pdb_strip_path)
         if alternate:
             info = None
         elif pdb_info:

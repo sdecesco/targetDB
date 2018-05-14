@@ -9,7 +9,7 @@ import scipy.stats as sc
 
 def get_single_features(target_id, user=None, pwd=None):
 	single_queries = {'general_info': "SELECT * FROM Targets WHERE Target_id='" + target_id + "'",
-	                  'disease': "SELECT Target_id,disease_name,disease_id FROM disease WHERE Target_id='" + target_id + "'",
+	                  'disease': "SELECT disease_name,disease_id FROM disease WHERE Target_id='" + target_id + "'",
 	                  'reactome': "SELECT pathway_name FROM pathways WHERE pathway_dataset='Reactome pathways data set' AND Target_id='" + target_id + "'",
 	                  'kegg': "SELECT pathway_name FROM pathways WHERE pathway_dataset='KEGG pathways data set' AND Target_id='" + target_id + "'",
 	                  'disease_exp': """SELECT
@@ -314,9 +314,8 @@ def get_single_features(target_id, user=None, pwd=None):
 
 	dbase = db.open_db('druggability', user=user, pwd=pwd)
 	results = {qname: pd.read_sql(query, con=dbase.db) for qname, query in single_queries.items()}
+	results.update(transform_bioactivities(results['bioactives'],dbase))
 
-	if not results['bioactives'].empty:
-		results.update(transform_bioactivities(results['bioactives'],dbase))
 	dbase.close()
 	return results
 
@@ -634,6 +633,11 @@ def get_list_features(gene_ids, user=None, pwd=None):
 
 
 def transform_bioactivities(results, dbase):
+	if results.empty:
+		return {'binding': pd.DataFrame(), 'dose_response': pd.DataFrame(), 'other': pd.DataFrame(), 'ADME': pd.DataFrame(), 'emax': pd.DataFrame(),
+		        'efficacy_bio': pd.DataFrame(), 'percent_inhibition': pd.DataFrame()}
+
+
 	conc = re.compile(r'(?:of|at)\s(\d+\.*\d*)\s?((?:u|n)M)')
 	bioactivity_types = ['Binding', 'Functionnal']
 	percent = ['Activity', 'Residual activity', 'Residual_activity', 'Residual Activity', 'Inhibition']
