@@ -29,6 +29,7 @@ from Bio.SubsMat.MatrixInfo import blosum62
 from operator import itemgetter
 from Bio.Blast import NCBIXML
 import pandas as pd
+from sqlalchemy import create_engine
 import numpy as np
 import scipy.stats as sc
 from druggability3 import cns_mpo as mpo
@@ -134,7 +135,6 @@ def gene_to_uniprotid(list_of_gene_name):
 	mg = mygene.MyGeneInfo()
 	gene_id = {}
 	request = mg.querymany(list_of_gene_name, scopes="symbol", fields=['uniprot'], species=9606, as_dataframe=True)
-	# request.to_csv('list_genes_to_be_done.csv')
 	request.dropna(axis=0, subset=['uniprot'], inplace=True)
 	try:
 		uniprot_dict = request['uniprot'].to_dict()
@@ -157,6 +157,55 @@ def gene_to_uniprotid(list_of_gene_name):
 		except (TypeError, KeyError):
 			gene_id[gene] = "No Match"
 	return gene_id
+
+def gene_to_uniprotid_local(list_of_genes):
+	engine = create_engine("mysql://" + args.db_username + ":" + args.db_password + "@localhost")
+	connector = engine.connect()
+	gene_list = []
+	for gene in list_of_genes:
+		gene = gene.rstrip('\n')
+		gene = gene.rstrip('\r')
+		gene_list.append(gene)
+	gene_ids = "','".join(gene_list)
+	gene_id_query = """SELECT * FROM druggability.hgnc as hgn WHERE hgn.hgnc_id in (SELECT hg.hgnc_id FROM druggability.hgnc as hg WHERE hg.xref_value in ('%s'))""" % gene_ids
+	gene_xref = pd.read_sql(gene_id_query, con=connector)
+	connector.close()
+	output = {}
+	for gene in gene_list:
+		gene_id = gene_xref[(gene_xref.xref_value == gene) & (gene_xref.xref_name == 'symbol')]['hgnc_id'].values
+		if gene_id.size == 0:
+			gene_id = gene_xref[(gene_xref.xref_value == gene) & ((gene_xref.xref_name == 'prev_symbol') | (gene_xref.xref_name == 'alias_symbol'))]['hgnc_id'].values
+		if gene_id.size == 0:
+			output[gene] = "No Match"
+			continue
+		elif gene_id.size > 1:
+			for g_id in gene_id:
+				gene_name = gene_xref[(gene_xref.hgnc_id == g_id) & (gene_xref.xref_name == 'symbol')].xref_value.values[0]
+				gene_uniprot = gene_xref[(gene_xref.hgnc_id == g_id) & (gene_xref.xref_name == 'uniprot_ids')].xref_value.values
+				if gene_uniprot.size > 1:
+					count = 0
+					for uniprot_id in gene_uniprot:
+						name = gene_name + '_' + str(count)
+						output[name] = uniprot_id
+						count += 1
+				elif gene_uniprot.size == 0:
+					output[gene] = "No Match"
+				else:
+					output[gene_name] = gene_uniprot[0]
+		else:
+			gene_name = gene_xref[(gene_xref.hgnc_id == gene_id[0]) & (gene_xref.xref_name == 'symbol')].xref_value.values[0]
+			gene_uniprot = gene_xref[(gene_xref.hgnc_id == gene_id[0]) & (gene_xref.xref_name == 'uniprot_ids')].xref_value.values
+			if gene_uniprot.size > 1:
+				count = 0
+				for uniprot_id in gene_uniprot:
+					name = gene_name + '_' + str(count)
+					output[name] = uniprot_id
+					count += 1
+			elif gene_uniprot.size == 0:
+				output[gene] = "No Match"
+			else:
+				output[gene_name] = gene_uniprot[0]
+	return output
 
 
 @retryer(max_retries=10, timeout=10)
@@ -1892,6 +1941,8 @@ def get_single_excel(target_id):
 
 		if not res['pdb'].empty:
 			col_orig = 6
+			if not res['pdb_blast'].empty:
+				col_orig = col_orig + 2
 			row = 0
 			wb_struct.merge_range(row, col_orig, row, col_orig + 7, 'PDB', col_header)
 			wb_struct.merge_range(row, col_orig + 8, row, col_orig + 14, 'PDB: Ligand', col_header)
@@ -2745,6 +2796,14 @@ if __name__ == "__main__":
 						type=str)
 	args = parser.parse_args()
 
+	if args.db_password and args.db_username:
+		db_pwd = args.db_password
+		db_user = args.db_username
+	else:
+		print("[ERROR]: Please provide username and password for the MySQL database (-db_user / -db_pwd)")
+		parser.print_help()
+		sys.exit()
+
 	while True:
 		if args.in_file:
 			if os.path.exists(args.in_file):
@@ -2756,18 +2815,18 @@ if __name__ == "__main__":
 							gene_dict[i[1]] = i[0]
 					else:
 						list_of_genes = gene_list.readlines()
-						gene_dict = gene_to_uniprotid(list_of_genes)
+						gene_dict = gene_to_uniprotid_local(list_of_genes)
 				break
 			else:
 				print('ERROR : file inputed as argument [-i] does not exist')
 				sys.exit()
 		if args.gene:
 			list_of_genes = [args.gene]
-			gene_dict = gene_to_uniprotid(list_of_genes)
+			gene_dict = gene_to_uniprotid_local(list_of_genes)
 			break
 		elif args.list_genes:
 			list_of_genes = args.list_genes.split(',')
-			gene_dict = gene_to_uniprotid(list_of_genes)
+			gene_dict = gene_to_uniprotid_local(list_of_genes)
 			break
 		elif args.Uniprot_ID:
 			try:
@@ -2782,14 +2841,6 @@ if __name__ == "__main__":
 			print('Please use one of the optional input options :')
 			parser.print_help()
 			sys.exit()
-
-	if args.db_password and args.db_username:
-		db_pwd = args.db_password
-		db_user = args.db_username
-	else:
-		print("[ERROR]: Please provide username and password for the MySQL database (-db_user / -db_pwd)")
-		parser.print_help()
-		sys.exit()
 
 	list_of_entries, gene_in_db = get_list_entries()
 
