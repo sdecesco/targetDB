@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import re
+import re,sqlite3,math
 import pandas as pd
 from druggability3 import cns_mpo as mpo
 from druggability3 import db_connection as db
@@ -7,7 +7,29 @@ import numpy as np
 import scipy.stats as sc
 
 
-def get_single_features(target_id, user=None, pwd=None):
+class StdevFunc:
+	def __init__(self):
+		self.M = 0.0
+		self.S = 0.0
+		self.k = 1
+
+	def step(self, value):
+		if value is None:
+			return
+		tM = self.M
+		self.M += (value - tM) / self.k
+		self.S += (value - tM) * (value - self.M)
+		self.k += 1
+
+	def finalize(self):
+		if self.k == 2:
+			return 0
+		elif self.k < 3:
+			return None
+		return math.sqrt(self.S / (self.k - 2))
+
+
+def get_single_features(target_id, dbase=None):
 	single_queries = {'general_info': "SELECT * FROM Targets WHERE Target_id='" + target_id + "'",
 	                  'disease': "SELECT disease_name,disease_id FROM disease WHERE Target_id='" + target_id + "'",
 	                  'reactome': "SELECT pathway_name FROM pathways WHERE pathway_dataset='Reactome pathways data set' AND Target_id='" + target_id + "'",
@@ -70,7 +92,7 @@ def get_single_features(target_id, user=None, pwd=None):
             FROM phenotype WHERE Target_id='%s'
             ORDER BY Allele_id,zygosity,genotype""" % target_id,
 	                  'isoforms': """SELECT
-              CONCAT(T.Gene_name,'-',I.Isoform_name) as isoform_name,
+              (T.Gene_name || '-' || I.Isoform_name) as isoform_name,
               I.Isoform_id,
               I.Sequence,
               I.n_residues,
@@ -129,7 +151,7 @@ def get_single_features(target_id, user=None, pwd=None):
               Hit_gene_species as species,
               max(tractable) SITES_tractable,
               max(druggable) SITES_druggable
-            FROM 3D_Blast
+            FROM `3D_Blast`
               LEFT JOIN drugEbility_sites DS
               ON DS.pdb_code=Hit_PDB_code
             WHERE Query_target_id='%s'
@@ -139,10 +161,10 @@ def get_single_features(target_id, user=None, pwd=None):
               C.PDB_code,
               P.Technique,
               P.Resolution,
-              GROUP_CONCAT(DISTINCT C.Chain SEPARATOR ',') AS Chain,
+              GROUP_CONCAT(DISTINCT C.Chain) AS Chain,
               C.n_residues,
               C.start_stop,
-              GROUP_CONCAT(DISTINCT D.Domain_name SEPARATOR ',') AS Domain_name,
+              GROUP_CONCAT(DISTINCT D.Domain_name) AS Domain_name,
               B.type type_of_binder,
               B.binding_type,
               B.binding_operator operator,
@@ -174,7 +196,7 @@ def get_single_features(target_id, user=None, pwd=None):
               round((F.apolar_sasa/F.total_sasa)*100,1) as fraction_apolar,
               F.Pocket_number as pocket_number,
               F.Score as pocket_score,
-              GROUP_CONCAT(CONCAT(D.Domain_name,' (',Domain.Coverage,'%)') SEPARATOR ',') as domains
+              GROUP_CONCAT((D.Domain_name || ' (' || Domain.Coverage || '%)')) as domains
             FROM fPockets F
               LEFT JOIN fPockets_Domain Domain
                 ON F.Pocket_id = Domain.Pocket_id
@@ -182,8 +204,7 @@ def get_single_features(target_id, user=None, pwd=None):
                 ON Domain.Domain_id=D.domain_id
             WHERE F.Target_id='{target}'
             AND F.druggable='TRUE' AND F.blast='FALSE'
-            GROUP BY F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(
-		                  target=target_id),
+            GROUP BY F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(target=target_id),
 	                  'alt_pockets': """SELECT
               F.PDB_code,
               F.DrugScore as druggability_score,
@@ -205,7 +226,7 @@ def get_single_features(target_id, user=None, pwd=None):
 	                  'bioactives': """SELECT
             B.lig_id,
               B.assay_id,
-              B.target_id,
+              B.target_id as target_id,
               B.standard_type,
               B.operator,
               B.value_num,
@@ -301,7 +322,7 @@ def get_single_features(target_id, user=None, pwd=None):
               ON B.inchi_key = L.std_inchi_key
             WHERE target_id = '%s'""" % target_id,
 	                  'domain_drugE': """SELECT
-      GROUP_CONCAT(DISTINCT UPPER(pdb_code) SEPARATOR ',') pdb_list,
+      GROUP_CONCAT(DISTINCT UPPER(pdb_code)) pdb_list,
       domain_fold,
       domain_superfamily,
     max(tractable) tractable,
@@ -311,12 +332,11 @@ def get_single_features(target_id, user=None, pwd=None):
       FROM PDB_Chains
     WHERE target_id = '%s')
     GROUP BY domain_fold""" % target_id}
-
-	dbase = db.open_db('druggability', user=user, pwd=pwd)
-	results = {qname: pd.read_sql(query, con=dbase.db) for qname, query in single_queries.items()}
-	results.update(transform_bioactivities(results['bioactives'],dbase))
-
-	dbase.close()
+	connector = sqlite3.connect(dbase)
+	connector.create_aggregate('stddev',1,StdevFunc)
+	results = {qname: pd.read_sql(query, con=connector) for qname, query in single_queries.items()}
+	results.update(transform_bioactivities(results['bioactives'],connector))
+	connector.close()
 	return results
 
 
@@ -326,10 +346,8 @@ def get_list_features(gene_ids, user=None, pwd=None):
     T.Gene_name
     ,T.Target_id as Uniprot_id
     ,T.Target_id as ID
-    ,T.Species
     ,(CASE WHEN T.Number_isoforms=0 THEN 1 ELSE T.Number_isoforms END) Number_isoforms
     ,T.Protein_class_desc
-    ,T.Protein_class_short
     ,T.Synonyms
     ,LENGTH(T.Sequence) as number_of_residues
     FROM Targets T
@@ -726,10 +744,9 @@ def transform_bioactivities(results, dbase):
 	              AND B.data_validity_comment is NULL
 	              AND A.confidence_score>=8
 	    GROUP BY B.lig_id,B.Target_id""" % query_lig
-		res_lig = dbase.get(query)
 
 		entropies = []
-		binding_data = pd.DataFrame.from_records(res_lig)
+		binding_data = pd.read_sql(query,con=dbase)
 		best_target_id = binding.iloc[0]['target_id']
 		if not binding_data.empty:
 			for name, group in binding_data.groupby('lig_id'):

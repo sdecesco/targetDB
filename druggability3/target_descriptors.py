@@ -2,15 +2,38 @@
 import pandas as pd
 from druggability3 import cns_mpo as mpo
 import numpy as np
-import io
+import io,sqlite3,math
 import scipy.stats as sc
 import matplotlib.pyplot as plt
 from druggability3 import db_connection as db
 
+class StdevFunc:
+	def __init__(self):
+		self.M = 0.0
+		self.S = 0.0
+		self.k = 1
 
-def get_descriptors(target_id,user=None,pwd=None):
-    dbase_tcrd = db.open_db('tcrd_v4.6.10',user=user,pwd=pwd)
-    dbase = db.open_db('druggability',user=user,pwd=pwd)
+	def step(self, value):
+		if value is None:
+			return
+		tM = self.M
+		self.M += (value - tM) / self.k
+		self.S += (value - tM) * (value - self.M)
+		self.k += 1
+
+	def finalize(self):
+		if self.k == 2:
+			return 0
+		elif self.k < 3:
+			return None
+		return math.sqrt(self.S / (self.k - 2))
+
+
+def get_descriptors(target_id,targetdb=None,tcrdDB=None):
+    connector_targetDB = sqlite3.connect(targetdb)
+    connector_targetDB.create_aggregate('stddev',1,StdevFunc)
+    connector_tcrdDB = sqlite3.connect(tcrdDB)
+    connector_tcrdDB.create_aggregate('stddev', 1, StdevFunc)
     list_queries={'gen_info' : """SELECT * FROM Targets WHERE Target_id='%s'""" % target_id,
                   'disease' : """SELECT Target_id,disease_name,disease_id FROM disease WHERE Target_id='%s'""" % target_id,
                   'reactome' : """SELECT pathway_name FROM pathways WHERE pathway_dataset='Reactome pathways data set' AND Target_id='%s'""" % target_id,
@@ -459,11 +482,11 @@ def get_descriptors(target_id,user=None,pwd=None):
     data['commercials_total'] = len(results['commercials'])
     data['commercials_potent_total'] = len(results['commercials'][results['commercials']['affinity_value']<=100])
 
-    dbase.close()
+    connector_targetDB.close()
 
 
     query_id = """SELECT id FROM protein WHERE uniprot= '%s'""" % target_id
-    tcrd_id = pd.read_sql(query_id, con=dbase_tcrd.db)
+    tcrd_id = pd.read_sql(query_id, con=connector_tcrdDB)
     if tcrd_id.empty:
         tcrd_id = 'None'
     else:
@@ -473,7 +496,7 @@ def get_descriptors(target_id,user=None,pwd=None):
                    'tdl_info':"""SELECT * FROM tdl_info WHERE protein_id = '%s'""" %tcrd_id,
                    'patent':"""SELECT * FROM patent_count where protein_id = '%s'""" % tcrd_id,
                    'expression':"""SELECT * FROM expression where etype='Consensus' and protein_id = '%s'""" % tcrd_id,
-                   'grant':"""SELECT * FROM `grant` where target_id ='%s'""" % tcrd_id,
+                   # 'grant':"""SELECT * FROM `grant` where target_id ='%s'""" % tcrd_id,
                    'screening':"""SELECT * FROM mlp_assay_info WHERE protein_id = '%s'""" %tcrd_id,
                    'pmscore':"""SELECT * FROM pmscore WHERE protein_id = '%s'""" %tcrd_id,
                    'disease':"""SELECT TI.protein_id,TI.disease_id,T.doid,TI.score,T.name,DP.parent
@@ -484,7 +507,7 @@ def get_descriptors(target_id,user=None,pwd=None):
     WHERE TI.protein_id='%s'
     ORDER BY TI.score DESC""" %tcrd_id,
                    'novelty':"""SELECT score FROM tinx_novelty WHERE protein_id = '%s'"""%tcrd_id}
-    tcrd_res = {qname: pd.read_sql(query, con=dbase_tcrd.db) for qname, query in tcrd_queries.items()}
+    tcrd_res = {qname: pd.read_sql(query, con=connector_tcrdDB) for qname, query in tcrd_queries.items()}
 
     tcrd_data = tcrd_res['target'].drop([ 'name', 'ttype', 'description', 'comment', 'idg2','famext'],axis=1)
     tcrd_data['Target_id']= target_id
@@ -514,12 +537,12 @@ def get_descriptors(target_id,user=None,pwd=None):
     expression = expression.add_prefix('Consensus_')
     tcrd_data = tcrd_data.join(expression)
 
-    grant = tcrd_res['grant'].copy()
-    tcrd_data['grants_total_count'] = len(grant.groupby('funding_ics'))
-    if len(grant.groupby('funding_ics')) != 0:
-        tcrd_data['grants_amount_total'] = grant.groupby('funding_ics')['cost'].mean().sum()
-    else:
-        tcrd_data['grants_amount_total'] = 0
+    # grant = tcrd_res['grant'].copy()
+    # tcrd_data['grants_total_count'] = len(grant.groupby('funding_ics'))
+    # if len(grant.groupby('funding_ics')) != 0:
+    #     tcrd_data['grants_amount_total'] = grant.groupby('funding_ics')['cost'].mean().sum()
+    # else:
+    #     tcrd_data['grants_amount_total'] = 0
 
     tcrd_data['screens_count'] = len(tcrd_res['screening'])
     if len(tcrd_res['screening']) != 0:
@@ -537,7 +560,7 @@ def get_descriptors(target_id,user=None,pwd=None):
         tcrd_data['tcrd_novelty_score'] = np.nan
 
     data = pd.merge(data,tcrd_data,on='Target_id')
-    dbase_tcrd.close()
+    connector_tcrdDB.close()
     return data
 
 
@@ -583,8 +606,8 @@ def make_spider_plot(data,labels,target_name=''):
 
 def make_score(df):
     col_to_keep = ['Ab Count', 'MAb Count', 'tcrd_disease_count', 'disease_count',
-                   'gwas_count', 'variants_count', 'mutant_count', 'isoforms_count',
-                   'domains_count', 'grants_amount_total', 'grants_total_count',
+                   'gwas_count', 'variants_count', 'mutant_count', 'isoforms_count','domains_count',
+                    # 'grants_amount_total', 'grants_total_count',
                    'ChEMBL_bioactives_count', 'ChEMBL_bioactives_good_selectivity_count',
                    'ChEMBL_bioactives_great_selectivity_count',
                    'ChEMBL_bioactives_moderate_selectivity_count',
@@ -626,10 +649,10 @@ def make_score(df):
     spider_score['phenotypes'] = cap_score(dflog2['phenotypes_count'], 5)
     spider_score['Pubmed Score'] = cap_score(dfsqrt['JensenLab PubMed Score'], 32)
     spider_score['Pubmed count'] = cap_score(dfsqrt['NCBI Gene PubMed Count'] / 2, 10)
-    spider_score['Grants'] = cap_score(dflog2['grants_total_count'], 10)
-    spider_score['Grants money'] = cap_score(
-        ((np.sqrt(df2['grants_amount_total'] / df2['grants_total_count']) - 200) / 500) * 10, 10)
-    spider_score.loc[spider_score['Grants money'] < 0, 'Grants money'] = 0
+    # spider_score['Grants'] = cap_score(dflog2['grants_total_count'], 10)
+    # spider_score['Grants money'] = cap_score(
+    #     ((np.sqrt(df2['grants_amount_total'] / df2['grants_total_count']) - 200) / 500) * 10, 10)
+    # spider_score.loc[spider_score['Grants money'] < 0, 'Grants money'] = 0
     spider_score = spider_score.fillna(0)
     return spider_score
 

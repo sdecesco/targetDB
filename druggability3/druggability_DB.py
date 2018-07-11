@@ -30,12 +30,11 @@ from operator import itemgetter
 from Bio.Blast import NCBIXML
 import pandas as pd
 from sqlalchemy import create_engine
-import numpy as np
-import scipy.stats as sc
 from druggability3 import cns_mpo as mpo
 from druggability3 import drugg_errors
 from druggability3 import target_descriptors as td
 from druggability3 import target_features as tf
+import pkg_resources as pkg
 
 # ===================# SETTING UP PATHS #============================#
 
@@ -45,9 +44,6 @@ dbase_file_path = '/data/sdecesco/databases/druggability/'
 output_lists_path = '/data/sdecesco/databases/druggability/outputs/lists/'
 output_single_path = '/data/sdecesco/databases/druggability/outputs/single_targets/'
 
-# dbase_file_path = '/Users/stephanedecesco/PycharmProjects/Druggability_3/druggability3/temp/druggability/'
-# output_lists_path = '/Users/stephanedecesco/PycharmProjects/Druggability_3/druggability3/temp/druggability/outputs/lists/'
-# output_single_path = '/Users/stephanedecesco/PycharmProjects/Druggability_3/druggability3/temp/druggability/outputs/single_targets/'
 
 if not os.path.exists(dbase_file_path):
 	os.makedirs(dbase_file_path)
@@ -60,6 +56,12 @@ if not os.path.exists(output_single_path):
 
 chembL_db_version = 'chembl_23'
 druggability_db = 'druggability'
+
+# =============================# PATH TO SQLITE DB #============================#
+
+targetDB = pkg.resource_filename(__name__, 'data/TargetDB_v1.db')
+chembl_24 = pkg.resource_filename(__name__, 'data/chembl_24.db')
+tcrd = pkg.resource_filename(__name__, 'data/tcrd_v5.2.0.db')
 
 
 # ===================# RECOVER THE LIST OF ENTRIES IN THE DBASE #===================#
@@ -2768,17 +2770,7 @@ if __name__ == "__main__":
 	parser.add_argument('-s', '--sphere_size', help='enter a value for the probe size of the pocket finder tool ('
 													'default = 3.0)', metavar='', type=float, default=3.0)
 	parser.add_argument('-v', '--verbose', help="Print information", action='store_true', default=False)
-	parser.add_argument('-R', '--report_only', help="Report mode ONLY, will not do any search (by default list "
-													"output, make sure to add -rs to get a single output)",
-						action='store_true',
-						default=False)
-	parser.add_argument('-rl', '--report_list', help="produce an output file at the end of the analysis with a list "
-													 "of genes entered", action='store_true',
-						default=False)
-	parser.add_argument('-rs', '--report_single', help="produce an output file for each target listed (more detailed "
-													   "information available) Caution : 1 File created per target",
-						action='store_true',
-						default=False)
+
 	parser.add_argument('-update', '--update', help="Update record if already in database (default: No)",
 						action='store_true',
 						default=False)
@@ -2844,38 +2836,31 @@ if __name__ == "__main__":
 
 	list_of_entries, gene_in_db = get_list_entries()
 
-	if args.report_only:
-		if args.report_single:
-			for gene_id in gene_dict.values():
-				get_single_excel(gene_id)
-		else:
-			get_list_excel(gene_dict.keys())
-	else:
-		targets_list = {}
-		for key, value in gene_dict.items():
-			if value in list_of_entries:
-				if args.update:
-					status = get_target_info(key, value)
-					targets_list[key] = status
-				else:
-					if args.verbose:
-						print('[GENE SKIPPED]: Already present in the database: ' + key)
-						print('=======================================================================')
-					targets_list[key] = 'Already present'
-
-			else:
+	targets_list = {}
+	for key, value in gene_dict.items():
+		if value in list_of_entries:
+			if args.update:
 				status = get_target_info(key, value)
 				targets_list[key] = status
+			else:
+				if args.verbose:
+					print('[GENE SKIPPED]: Already present in the database: ' + key)
+					print('=======================================================================')
+				targets_list[key] = 'Already present'
 
-		if args.report_list or args.report_single:
-			list_of_entries, gene_in_db = get_list_entries()
-			if args.report_list:
-				export_list = []
-				for key in targets_list:
-					if targets_list[key] == 'Target completed' or targets_list[key] == 'Already present':
-						export_list.append(key)
-				get_list_excel(export_list)
-			if args.report_single:
-				for key in targets_list:
-					if targets_list[key] == 'Target completed' or targets_list[key] == 'Already present':
-						get_single_excel(gene_dict[key])
+		else:
+			status = get_target_info(key, value)
+			targets_list[key] = status
+
+		# if args.report_list or args.report_single:
+		# 	list_of_entries, gene_in_db = get_list_entries()
+		# 	if args.report_list:
+		# 		export_list = []
+		# 		for key in targets_list:
+		# 			if targets_list[key] == 'Target completed' or targets_list[key] == 'Already present':
+		# 				export_list.append(key)
+		# 		get_list_excel(export_list)
+		# 	if args.report_single:
+		# 		for key in targets_list:
+		# 			if targets_list[key] == 'Target completed' or targets_list[key] == 'Already present':
+		# 				get_single_excel(gene_dict[key])
