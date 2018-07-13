@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import re,sqlite3,math
+import re, sqlite3, math
 import pandas as pd
 from druggability3 import cns_mpo as mpo
 from druggability3 import db_connection as db
@@ -185,7 +185,7 @@ def get_single_features(target_id, dbase=None):
               LEFT JOIN pdb_bind B
                 ON B.pdb_code = C.PDB_code
               LEFT JOIN drugEbility_sites DS
-                ON DS.pdb_code = C.PDB_code
+                ON DS.pdb_code = LOWER(C.PDB_code)
             WHERE C.Target_id='%s'
             GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % target_id,
 	                  'pockets': """SELECT
@@ -204,7 +204,8 @@ def get_single_features(target_id, dbase=None):
                 ON Domain.Domain_id=D.domain_id
             WHERE F.Target_id='{target}'
             AND F.druggable='TRUE' AND F.blast='FALSE'
-            GROUP BY F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(target=target_id),
+            GROUP BY F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(
+		                  target=target_id),
 	                  'alt_pockets': """SELECT
               F.PDB_code,
               F.DrugScore as druggability_score,
@@ -328,20 +329,19 @@ def get_single_features(target_id, dbase=None):
     max(tractable) tractable,
       max(druggable) druggable
     FROM drugEbility_domains
-    WHERE pdb_code in (SELECT DISTINCT PDB_code
+    WHERE pdb_code in (SELECT DISTINCT LOWER(PDB_code)
       FROM PDB_Chains
     WHERE target_id = '%s')
     GROUP BY domain_fold""" % target_id}
 	connector = sqlite3.connect(dbase)
-	connector.create_aggregate('stddev',1,StdevFunc)
+	connector.create_aggregate('stddev', 1, StdevFunc)
 	results = {qname: pd.read_sql(query, con=connector) for qname, query in single_queries.items()}
-	results.update(transform_bioactivities(results['bioactives'],connector))
+	results.update(transform_bioactivities(results['bioactives'], connector))
 	connector.close()
 	return results
 
 
-
-def get_list_features(gene_ids, user=None, pwd=None):
+def get_list_features(gene_ids, dbase):
 	list_queries = {'gen': """SELECT
     T.Gene_name
     ,T.Target_id as Uniprot_id
@@ -353,165 +353,115 @@ def get_list_features(gene_ids, user=None, pwd=None):
     FROM Targets T
     WHERE Target_id in ('%s')""" % gene_ids,
 	                'domains': """SELECT
-     D.Target_id ID,
-     GROUP_CONCAT(D.domain SEPARATOR '\n') AS domain
-      FROM
-    (SELECT
-       D.Target_id
-      ,CONCAT(D.source_name,'\n',GROUP_CONCAT(CONCAT('\t',D.Domain_name,' (',D.Domain_start,'-',D.Domain_stop,')') ORDER BY D.Domain_start SEPARATOR '\n')) as domain
+       D.Target_id as ID
+      ,GROUP_CONCAT((D.Domain_name||' ('||D.Domain_start||'-'||D.Domain_stop||')'), '\n') as domain
     FROM Domain_targets D
       WHERE D.Target_id in ('%s')
-        GROUP BY D.Target_id,D.source_name) D
-    GROUP BY D.Target_id""" % gene_ids,
+        GROUP BY D.Target_id,D.source_name
+        ORDER BY D.Domain_start""" % gene_ids,
 	                'mutant': """SELECT
       Target_id ID,
-      GROUP_CONCAT(CONCAT('(',start,') ',previous,'-->',new,' comment: ',SUBSTRING_INDEX(comment,'.',1),'; in domains: ',domains) ORDER BY start SEPARATOR '\n') as MUTANT
+      COUNT(*) as MUTANT
       FROM modifications
         WHERE mod_type ='MUTAGEN'
         AND Target_id in ('%s')
     GROUP BY Target_id""" % gene_ids,
 	                'variant': """SELECT
       Target_id ID,
-      concat(substring_index(GROUP_CONCAT(CONCAT('(',start,') ',previous,'-->',new,' comment: ',SUBSTRING_INDEX(comment,'.',1),'; in domains: ',domains) ORDER BY start SEPARATOR '\n'),'\n',15),case when count(comment) > 15 THEN  concat('\n+ ',count(comment)-15,' others') ELSE '' END)  as VARIANT
+      COUNT(*)  as VARIANT
       FROM modifications
         WHERE mod_type = 'VAR'
         AND Target_id in ('%s')
     GROUP BY Target_id""" % gene_ids,
 	                'pdb': """SELECT
-      T.Target_id ID,
-      concat(substring_index(GROUP_CONCAT(CONCAT(T.PDB_code,': ',T.n_residues,' residues (',T.start_stop,', ',T.P_seq,'%%) Chain(s): ',T.Chain,' Domain(s): ',CASE WHEN T.domain is NULL THEN '' ELSE T.domain END,' (',T.Technique,': ',T.Resolution,')') ORDER BY T.P_seq DESC SEPARATOR '\n'),'\n',15),case when count(T.PDB_code) > 15 THEN  concat('\n+ ',count(T.PDB_code)-15,' others') ELSE '' END) AS PDB
-      FROM
-      (SELECT
-      C.Target_id,
-      C.PDB_code,
-      C.Chain_id,
-      C.n_residues,
-      C.start_stop,
-      ROUND(C.n_residues/LENGTH(T.Sequence)*100) AS "P_seq",
-      GROUP_CONCAT(DISTINCT C.Chain ORDER BY C.Chain) AS Chain,
-      GROUP_CONCAT(DISTINCT DT.Domain_name ORDER BY DT.Domain_start) AS domain,
-      DT.Domain_name,
-      P.Technique,
-      P.Resolution
-      FROM (SELECT * FROM PDB_Chains C WHERE C.Target_id in ('%s')) C
-    LEFT JOIN PDB P
-        ON C.PDB_code=P.PDB_code
-    LEFT JOIN PDBChain_Domain D
-        ON C.Chain_id=D.Chain_id
-    LEFT JOIN Domain_targets DT
-        ON D.Domain_id=DT.domain_id
-    LEFT JOIN Targets T
-        ON C.Target_id = T.Target_id
-    GROUP BY C.Target_id,C.PDB_code)T
-        GROUP BY T.Target_id""" % gene_ids,
+						  C.Target_id ID,
+	                      C.PDB_code,
+	                      P.Technique,
+	                      P.Resolution,
+	                      GROUP_CONCAT(DISTINCT C.Chain) AS Chain,
+	                      C.n_residues,
+	                      C.start_stop,
+	                      GROUP_CONCAT(DISTINCT D.Domain_name) AS Domain_name,
+	                      B.type type_of_binder,
+	                      B.binding_type,
+	                      B.binding_operator operator,
+	                      B.binding_value 'value',
+	                      B.binding_units units,
+	                      B.lig_name Ligand_name,
+	                      B.pub_year publication_year,
+	                      max(DS.tractable) SITES_tractable,
+	                      max(DS.druggable) SITES_druggable
+	                    FROM PDB_Chains C
+	                      LEFT JOIN PDB P
+	                        ON C.PDB_code = P.PDB_code
+	                      LEFT JOIN PDBChain_Domain Domain
+	                        ON C.Chain_id = Domain.Chain_id
+	                      LEFT JOIN Domain_targets D
+	                        ON Domain.Domain_id = D.domain_id
+	                      LEFT JOIN pdb_bind B
+	                        ON B.pdb_code = C.PDB_code
+	                      LEFT JOIN drugEbility_sites DS
+	                        ON DS.pdb_code = C.PDB_code
+	                    WHERE C.Target_id in ('%s')
+	                    GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % gene_ids,
 	                'blast': """SELECT
-      Query_target_id as ID,
-    concat(substring_index(GROUP_CONCAT(CONCAT(Hit_gene_name,'_',Hit_gene_species,' (',similarity,'%%)') ORDER BY similarity DESC SEPARATOR '\n'),'\n',10),case when count(Hit_gene_name) > 10 THEN  concat('\n+ ',count(Hit_gene_name)-10,' others') ELSE '' END) as protein_blast
-      FROM protein_blast
-        WHERE Query_target_id in ('%s')
-    GROUP BY Query_target_id""" % gene_ids,
+	                      Query_target_id as ID,
+	                    COUNT(*) as protein_blast
+	                      FROM protein_blast
+	                        WHERE Query_target_id in ('%s') AND similarity>50
+	                    GROUP BY Query_target_id""" % gene_ids,
 	                'pdbblast': """SELECT
-      Query_target_id as ID,
-    concat(substring_index(GROUP_CONCAT(CONCAT(Hit_PDB_code,' Chain: ',Chain_Letter,' (',Hit_gene_name,'_',Hit_gene_species,' - ',similarity,'%%)') ORDER BY similarity DESC SEPARATOR '\n'),'\n',10),case when count(Hit_gene_name) > 10 THEN  concat('\n+ ',count(Hit_gene_name)-10,' others') ELSE '' END) as pdb_blast
-      FROM `3D_Blast`
-        WHERE Query_target_id in ('%s')
-    GROUP BY Query_target_id""" % gene_ids,
+	                      Query_target_id as ID,
+	                      count(*) as pdb_blast
+	                      FROM `3D_Blast`
+	                        WHERE Query_target_id in ('%s')
+	                    GROUP BY Query_target_id""" % gene_ids,
 	                'pockets': """SELECT
-      P.Target_id ID,
-      GROUP_CONCAT(P.pockets_domains SEPARATOR '\n') pockets
-    FROM
-    (SELECT
-      POCK.Target_id,
-      CONCAT(POCK.Domain_name,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',POCK.PDB_code,': Druggability_score=',POCK.DrugScore,' Volume=',POCK.volume,' Area=',POCK.total_sasa,' (',POCK.Fraction_apolar,'%% apolar)(',POCK.Pocket_number,')')ORDER BY POCK.DrugScore DESC SEPARATOR '\n'),'\n',3),case when count(POCK.Pocket_number) > 3 THEN  concat('\n\t+ ',count(POCK.Pocket_number)-3,' others') ELSE '' END)) AS pockets_domains
-      FROM
-    (SELECT T1.*,
-      (CASE WHEN T1.Domain_id='other' THEN 'other' WHEN T1.Domain_id is NULL THEN 'other' ELSE D.Domain_name END) Domain_name
-      FROM
-    (SELECT
-      FP.Target_id,
-      FP.PDB_code,
-      FP.Pocket_number,
-      FP.Score,
-      FP.DrugScore,
-      FP.total_sasa,
-      ROUND((FP.apolar_sasa/FP.total_sasa)*100,1) AS Fraction_apolar,
-      FP.volume,
-      FPD.Domain_id
-      FROM (SELECT * FROM fPockets WHERE druggable='TRUE'
-      AND blast='FALSE' AND Target_id in ('%s'))FP
-      LEFT JOIN fPockets_Domain FPD
-        ON FP.Pocket_id=FPD.Pocket_id
-    ) T1
-    LEFT JOIN Domain_targets D
-        ON T1.Domain_id=D.domain_id) POCK
-    GROUP BY POCK.Target_id,POCK.Domain_name) P
-    GROUP BY P.Target_id""" % gene_ids,
+						  F.Target_id ID,
+	                      F.PDB_code,
+	                      F.DrugScore as druggability_score,
+	                      round(F.total_sasa,1) as area,
+	                      round(F.volume,1) as volume,
+	                      round((F.apolar_sasa/F.total_sasa)*100,1) as fraction_apolar,
+	                      F.Pocket_number as pocket_number,
+	                      F.Score as pocket_score,
+	                      GROUP_CONCAT(D.Domain_name) as domains
+	                    FROM fPockets F
+	                      LEFT JOIN fPockets_Domain Domain
+	                        ON F.Pocket_id = Domain.Pocket_id
+	                      LEFT JOIN Domain_targets D
+	                        ON Domain.Domain_id=D.domain_id
+	                    WHERE F.Target_id in ('{target}')
+	                    AND F.druggable='TRUE' AND F.blast='FALSE'
+	                    GROUP BY F.Target_id,F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(target=gene_ids),
 	                'altpockets': """SELECT
-      ALT_POCK.Target_id ID,
-      GROUP_CONCAT(ALT_POCK.pocket_gene_name SEPARATOR '\n') alt_pockets
-    FROM
-    (SELECT POCK.Target_id,
-        CONCAT(POCK.Hit_gene_name,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',POCK.PDB_code,'(Similarity=',ROUND(POCK.similarity),'%%): Druggability_score=',ROUND(POCK.DrugScore,2),' Volume=',ROUND(POCK.volume,1),' Area=',ROUND(POCK.total_sasa,1),' (',ROUND(POCK.Fraction_apolar),'%% apolar)(',POCK.Pocket_number,')')ORDER BY POCK.similarity DESC,POCK.DrugScore DESC SEPARATOR '\n'),'\n',3),case when count(POCK.Pocket_number) > 3 THEN  concat('\n\t+ ',count(POCK.Pocket_number)-3,' others') ELSE '' END)) AS pocket_gene_name
-    FROM
-    (SELECT
-      FP.Target_id,
-      FP.PDB_code,
-      FP.Pocket_number,
-      FP.Score,
-      FP.DrugScore,
-      FP.total_sasa,
-      ROUND((FP.apolar_sasa/FP.total_sasa)*100,1) AS Fraction_apolar,
-      FP.volume,
-      3D.Hit_PDB_code,
-      3D.Hit_gene_name,
-      3D.similarity
-      FROM (SELECT * FROM fPockets WHERE Target_id in ('%s') AND druggable='TRUE' AND blast='TRUE') FP
-        LEFT JOIN 3D_Blast 3D
-        ON 3D.Query_target_id=FP.Target_id AND 3D.Hit_PDB_code=FP.PDB_code
-      WHERE 3D.similarity>=70) POCK
-    GROUP BY POCK.Target_id,POCK.Hit_gene_name) ALT_POCK
-    GROUP BY ALT_POCK.Target_id""" % gene_ids,
-	                'disease_expression': """SELECT
-      T1.Target_id ID,
-      concat(substring_index(GROUP_CONCAT(CASE WHEN T1.up is null THEN null ELSE CONCAT(T1.up,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END))END ORDER BY T1.t_stat DESC SEPARATOR '\n'),'\n',20),case when count(T1.up) > 20 THEN  concat('\n+ ',count(T1.up)-20,' others') ELSE '' END) AS upregulated_in_disease
-    ,  concat(substring_index(GROUP_CONCAT(CASE WHEN T1.down is null THEN null ELSE CONCAT(T1.down,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END))END ORDER BY T1.t_stat SEPARATOR '\n'),'\n',20),case when count(T1.down) > 20 THEN  concat('\n+ ',count(T1.down)-20,' others') ELSE '' END) AS downregulated_in_disease
-
-    FROM
-        (SELECT *,
-           (CASE WHEN t_stat<0 THEN disease END) AS down,
-          (CASE WHEN t_stat>=0 THEN disease END) AS up
-          FROM
-    ( SELECT
-      disease,
-      avg(t_stat) as t_stat,
-      stddev(t_stat) as std_dev_t,
-      count(t_stat) as n_number,
-      Target_id
-      FROM diff_exp_disease
-        WHERE t_stat > 5 or t_stat < -5
-        AND Target_id in ('%s')
-      GROUP BY Target_id,disease
-      ) T1
-        ) T1
-    GROUP BY T1.Target_id""" % gene_ids,
-	                'tissue_expression': """SELECT
-      T1.Target_id ID,
-      GROUP_CONCAT(CASE WHEN T1.up is null THEN null ELSE CONCAT(T1.up,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END)) END ORDER BY T1.t_stat DESC SEPARATOR '\n') AS overexpressed_in,
-      GROUP_CONCAT(CASE WHEN T1.down is null THEN null ELSE CONCAT(T1.down,' (T-stat= ',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END)) END ORDER BY T1.t_stat SEPARATOR '\n') AS underexpressed_in
-      FROM
-    ( SELECT
-      Tissue,
-      avg(t_stat) as t_stat,
-      stddev(t_stat) as std_dev_t,
-      count(t_stat) as n_number,
-      Target_id,
-      (CASE WHEN t_stat<0 THEN Tissue END) AS down,
-      (CASE WHEN t_stat>=0 THEN Tissue END) AS up
-    FROM diff_exp_tissue
-    WHERE t_stat > 5 or t_stat < -5
-      AND Target_id in ('%s')
-    GROUP BY Target_id,Tissue)T1
-    GROUP BY T1.Target_id""" % gene_ids,
+	                						  F.Target_id ID,
+	                	                      F.PDB_code,
+	                	                      F.DrugScore as druggability_score,
+	                	                      round(F.total_sasa,1) as area,
+	                	                      round(F.volume,1) as volume,
+	                	                      round((F.apolar_sasa/F.total_sasa)*100,1) as fraction_apolar,
+	                	                      F.Pocket_number as pocket_number,
+	                	                      F.Score as pocket_score,
+	                	                      GROUP_CONCAT(D.Domain_name) as domains
+	                	                    FROM fPockets F
+	                	                      LEFT JOIN fPockets_Domain Domain
+	                	                        ON F.Pocket_id = Domain.Pocket_id
+	                	                      LEFT JOIN Domain_targets D
+	                	                        ON Domain.Domain_id=D.domain_id
+	                	                    WHERE F.Target_id in ('%s')
+	                	                    AND F.druggable='TRUE' AND F.blast='TRUE'
+	                	                    GROUP BY F.Target_id,F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""" % gene_ids,
+					'organ_expression':"""SELECT
+						  Target_id ID,
+					      organ as organ_name,
+					      sum(value) as Total_value,
+					      count(value)as n_tissues,
+					      round(avg(value),1) as avg_value
+					      FROM protein_expression_levels
+					      WHERE Target_id in ('%s')
+					      GROUP BY organ
+					      ORDER BY avg_value DESC""" % gene_ids,
 	                'pathways': """SELECT
       P.Target_id ID,
       GROUP_CONCAT(P.pathways SEPARATOR '\n') AS pathways
@@ -560,47 +510,6 @@ def get_list_features(gene_ids, user=None, pwd=None):
           ,ROUND(PROT_SEL.Selectivity_entropy,3) AS expression_selectivity
       FROM protein_expression_selectivity PROT_SEL
     WHERE PROT_SEL.Target_id in ('%s')""" % gene_ids,
-	                'protAtlas': """SELECT
-      T1.Target_id ID,
-      GROUP_CONCAT(CONCAT(T1.level_graph,(CASE
-                           WHEN 15-T1.n_cell = 0 THEN ''
-                           WHEN 15-T1.n_cell = 1 THEN '      '
-                           WHEN 15-T1.n_cell = 2 THEN '            '
-                           WHEN 15-T1.n_cell = 3 THEN '                  '
-                           WHEN 15-T1.n_cell = 4 THEN '                        '
-                           WHEN 15-T1.n_cell = 5 THEN '                              '
-                           WHEN 15-T1.n_cell = 6 THEN '                                    '
-                           WHEN 15-T1.n_cell = 7 THEN '                                          '
-                           WHEN 15-T1.n_cell = 8 THEN '                                                '
-                           WHEN 15-T1.n_cell = 9 THEN '                                                      '
-                           WHEN 15-T1.n_cell = 10 THEN '                                                            '
-                           WHEN 15-T1.n_cell = 11 THEN '                                                                  '
-                           WHEN 15-T1.n_cell = 12 THEN '                                                                        '
-                           WHEN 15-T1.n_cell = 13 THEN '                                                                              '
-                           WHEN 15-T1.n_cell = 14 THEN '                                                                                    '
-                           WHEN 15-T1.n_cell = 15 THEN '                                                                                          '
-
-                           END),'\t',T1.organ,' (',ROUND(T1.avg_level_num,1),')') ORDER BY T1.avg_level_num DESC SEPARATOR '\n') AS protein_atlas_expression
-      FROM
-    (SELECT
-      T1.Target_id,
-      T1.organ,
-      GROUP_CONCAT(CONCAT(T1.level_graph) ORDER BY T1.level_numeric DESC SEPARATOR '') level_graph,
-      SUM(T1.level_numeric) level_num,
-      AVG(T1.level_numeric) avg_level_num,
-      COUNT(T1.cell) n_cell
-      FROM
-    (SELECT
-        T1.Target_id,
-        T1.organ,
-        T1.tissue,
-        T1.cell,
-        CASE WHEN value=0 THEN '[ -]' WHEN value=1 THEN '[1]' WHEN value=2 THEN '[2]' WHEN value=3 THEN '[3]' END AS level_graph,
-        T1.value AS level_numeric
-      FROM protein_expression_levels T1
-      WHERE T1.Target_id in ('%s')) T1
-    GROUP BY T1.Target_id,T1.organ)T1
-    GROUP BY T1.Target_id""" % gene_ids,
 	                'bioactivities': """SELECT
         B.ID,
         COUNT(DISTINCT L.lig_id) AS Number_of_ligands,
@@ -630,11 +539,11 @@ def get_list_features(gene_ids, user=None, pwd=None):
        GROUP_CONCAT(CONCAT('Affinity: ',affinity_type,': ',affinity_value,affinity_unit,' (price: ',price,') (website: ',website,')') SEPARATOR '\n') as commercially_available
     FROM purchasable_compounds
     WHERE target_id in ('%s') AND affinity_value <= 500
-    GROUP BY target_id""" % gene_ids
-	                }
-	dbase = db.open_db('druggability', user=user, pwd=pwd)
+    GROUP BY target_id""" % gene_ids}
 
-	results = {qname: pd.read_sql(query, con=dbase.db) for qname, query in list_queries.items()}
+	connector = sqlite3.connect(dbase)
+	results = {qname: pd.read_sql(query, con=connector) for qname, query in list_queries.items()}
+	connector.close()
 
 	if not results['gen'].empty:
 		all = pd.DataFrame.from_records(results['gen'])
@@ -642,6 +551,9 @@ def get_list_features(gene_ids, user=None, pwd=None):
 		print(
 			"[EXPORT ERROR]: Something went wrong during the export process \nYour requested genes might not be present in the database, or the database is not available at the moment\nPlease try again later")
 		return "Failure"
+
+	#TODO: pdb dataframe --> extract fields
+	#TODO: pockets/altpockets dataframe --> group and extract fields
 
 	for name, res in results.items():
 		if name == 'gen':
@@ -652,9 +564,9 @@ def get_list_features(gene_ids, user=None, pwd=None):
 
 def transform_bioactivities(results, dbase):
 	if results.empty:
-		return {'binding': pd.DataFrame(), 'dose_response': pd.DataFrame(), 'other': pd.DataFrame(), 'ADME': pd.DataFrame(), 'emax': pd.DataFrame(),
+		return {'binding': pd.DataFrame(), 'dose_response': pd.DataFrame(), 'other': pd.DataFrame(),
+		        'ADME': pd.DataFrame(), 'emax': pd.DataFrame(),
 		        'efficacy_bio': pd.DataFrame(), 'percent_inhibition': pd.DataFrame()}
-
 
 	conc = re.compile(r'(?:of|at)\s(\d+\.*\d*)\s?((?:u|n)M)')
 	bioactivity_types = ['Binding', 'Functionnal']
@@ -746,7 +658,7 @@ def transform_bioactivities(results, dbase):
 	    GROUP BY B.lig_id,B.Target_id""" % query_lig
 
 		entropies = []
-		binding_data = pd.read_sql(query,con=dbase)
+		binding_data = pd.read_sql(query, con=dbase)
 		best_target_id = binding.iloc[0]['target_id']
 		if not binding_data.empty:
 			for name, group in binding_data.groupby('lig_id'):
@@ -785,4 +697,4 @@ def transform_bioactivities(results, dbase):
 			             'ref_bio']
 			binding = binding[col_order]
 	return {'binding': binding, 'dose_response': dose_response, 'other': other, 'ADME': ADME, 'emax': emax,
-            'efficacy_bio': efficacy_bio, 'percent_inhibition': percent_bio}
+	        'efficacy_bio': efficacy_bio, 'percent_inhibition': percent_bio}
