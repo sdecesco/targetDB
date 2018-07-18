@@ -5,7 +5,7 @@ import subprocess
 import shutil
 import argparse
 from operator import itemgetter
-from druggability3 import pdb_parser as parser
+from druggability3.utils import pdb_parser as parser
 from Bio.PDB import *
 
 Bioparser = PDBParser(PERMISSIVE=1, QUIET=True)

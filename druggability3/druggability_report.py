@@ -7,24 +7,109 @@ except ImportError:
 	import urllib
 	from urllib2 import *
 
-import argparse, sys, os, sqlite3, re,requests,time
+import argparse, sys, os, sqlite3, re,requests,time,configparser,readline
 from Bio import Entrez, Medline
 from druggability3 import target_descriptors as td
 from druggability3 import target_features as tf
 from druggability3 import cns_mpo as mpo
+from druggability3.utils import tabcompleter as t
 import pandas as pd
-import pkg_resources as pkg
 
-# =============================# PATH TO SAVE REPORT FILES #============================#
+tab_comp = t.tabCompleter()
+readline.set_completer_delims('\t')
+readline.parse_and_bind("tab: complete")
+readline.set_completer(tab_comp.pathCompleter)
 
-output_lists_path = '/data/sdecesco/databases/druggability/outputs/lists/'
-output_single_path = '/data/sdecesco/databases/druggability/outputs/single_targets/'
+# #TODO: find a way to get the path set during the installation and/or ask user for the path and store in .ini file
+# # =============================# PATH TO SAVE REPORT FILES #============================#
+#
+# output_lists_path = '/data/sdecesco/databases/druggability/outputs/lists/'
+# output_single_path = '/data/sdecesco/databases/druggability/outputs/single_targets/'
+#
+# # =============================# PATH TO SQLITE DB #============================#
+#
+# data_path = '/'.join(str(td.__file__).split('/')[:-1])+'/data/'
+#
+# targetDB = data_path+'TargetDB_v1.db'
+# chembl_24 = data_path+'chembl_24.db'
+# tcrd = data_path+'tcrd_v5.2.0.db'
 
-# =============================# PATH TO SQLITE DB #============================#
 
-targetDB = pkg.resource_filename(__name__, 'data/TargetDB_v1.db')
-chembl_24 = pkg.resource_filename(__name__, 'data/chembl_24.db')
-tcrd = pkg.resource_filename(__name__, 'data/tcrd_v5.2.0.db')
+def get_config_from_user(config, todo=['chembl', 'targetdb', 'tcrd', 'single', 'list', 'email']):
+	print('========================================================')
+	print('=================== CONFIGURATION ======================')
+	print('========================================================')
+
+	if 'chembl' in todo:
+		path_exist = False
+		while path_exist == False:
+			print('========================================================')
+			print('================ CHEMBL SQLITE FILE ====================')
+			print('=====================(optional)=========================\n')
+			chembldb_path = input(
+				"Please navigate to the chembl sqlite database (optional - leave blank if you only want to generate reports) \n")
+			if os.path.exists(chembldb_path):
+				path_exist = True
+			else:
+				print('[ERROR]: The file you have entered does not exists \n\n')
+		config['database_path']['chembl'] = chembldb_path
+	if 'targetdb' in todo:
+		path_exist = False
+		while path_exist == False:
+			print('========================================================')
+			print('=============== TargetDB SQLITE FILE ===================')
+			print('========================================================\n')
+			targetDB_path = input("Please navigate to the TargetDB sqlite database \n")
+			if os.path.exists(targetDB_path):
+				path_exist = True
+			else:
+				print('[ERROR]: The file you have entered does not exists \n\n')
+		config['database_path']['targetdb'] = targetDB_path
+	if 'tcrd' in todo:
+		path_exist = False
+		while path_exist == False:
+			print('========================================================')
+			print('================= tcrd SQLITE FILE =====================')
+			print('========================================================\n')
+			tcrd_path = input("Please navigate to the Tcrd sqlite database \n")
+			if os.path.exists(tcrd_path):
+				path_exist = True
+			else:
+				print('[ERROR]: The file you have entered does not exists \n\n')
+		config['database_path']['tcrd'] = tcrd_path
+	if 'single' in todo:
+		path_exist = False
+		while path_exist == False:
+			print('========================================================')
+			print('=========== SINGLE TARGET OUTPUT FOLDER ================')
+			print('========================================================\n')
+			single_output = input(
+				"Please indicate the path to the folder in which to output the single target reports \n")
+			if os.path.isdir(single_output):
+				path_exist = True
+			else:
+				print('[ERROR]: The folder you have entered does not exists \n\n')
+		config['output_path']['single'] = single_output
+	if 'list' in todo:
+		path_exist = False
+		while path_exist == False:
+			print('========================================================')
+			print('============= LIST TARGET OUTPUT FOLDER ================')
+			print('========================================================\n')
+			list_output = input("Please indicate the path to the folder in which to output the list target reports \n")
+			if os.path.isdir(list_output):
+				path_exist = True
+			else:
+				print('[ERROR]: The folder you have entered does not exists \n\n')
+		config['output_path']['list'] = list_output
+	if 'email' in todo:
+		print('========================================================')
+		print('============= EMAIL FOR PUBMED SEARCH ==================')
+		print('========================================================\n')
+		pubmed_email = input(
+			"Please enter your email (used for pubmed searches - pubmed api requires an email for batch requests) \n")
+		config['pubmed_email']['email'] = pubmed_email
+	return config
 
 
 def get_list_entries():
@@ -317,8 +402,8 @@ def get_single_excel(target_id):
 
 		wb_general_info = workbook.add_worksheet('General info')
 		writer.sheets['General info'] = wb_general_info
-		wb_references = workbook.add_worksheet('References')
-		writer.sheets['References'] = wb_references
+		wb_references = workbook.add_worksheet('Pubmed_search')
+		writer.sheets['Pubmed_search'] = wb_references
 		wb_disease = workbook.add_worksheet('diseases')
 		writer.sheets['diseases'] = wb_disease
 		wb_opentarget = workbook.add_worksheet('open_target_association')
@@ -346,8 +431,8 @@ def get_single_excel(target_id):
 		opentarget = pd.DataFrame(data=None)
 
 		if not res['general_info'].empty:
-			if args.email:
-				pubmed = pubmed_search(res['general_info'].iloc[0]['Gene_name'], args.email)
+			if pubmed_email:
+				pubmed = pubmed_search(res['general_info'].iloc[0]['Gene_name'], pubmed_email)
 			search_term = res['general_info'].iloc[0]['Gene_name']
 			opentarget = open_target_association(search_term)
 
@@ -907,366 +992,41 @@ def get_single_excel(target_id):
 
 
 def get_list_excel(list_targets):
-	list_to_do = {}
 	not_in_db = {'Not present in DB': []}
-	for g in list_targets:
-		in_db = False
-		if '_' in g:
-			g = g.split('_')[0]
-		for entry in gene_in_db:
-			if g.upper() == entry['name'].upper():
-				list_to_do[entry['ID']] = g
-				in_db = True
-				continue
-			elif g.upper() in entry['syn']:
-				list_to_do[entry['ID']] = g
-				in_db = True
-				continue
-		if not in_db:
-			not_in_db['Not present in DB'].append(g)
-	if not list_to_do:
+
+	if not list_targets:
 		return print("No genes that you entered are in the Database")
 
-	not_in_db = pd.DataFrame.from_dict(not_in_db)
-	pubmed = {'ID': [], 'total # publications': [], 'number of Dementia publications': []}
-	for id, name in list_to_do.items():
-		pubmed['ID'].append(id)
-		pubmed['number of Dementia publications'].append(
-			pubmed_search(name, args.email, return_number=True, mesh_term='Dementia'))
-		pubmed['total # publications'].append(pubmed_search(name, args.email, return_number=True))
-	# TODO: Mesh term is hard-coded here
-	pubmed = pd.DataFrame.from_dict(pubmed)
-
-	dbase = db.open_db(druggability_db, pwd=args.db_password, user=args.db_username)
-
-	gene_ids = "','".join(list_to_do.keys())
-
-	list_queries = {'gen': """SELECT
-T.Gene_name
-,T.Target_id as Uniprot_id
-,T.Target_id as ID
-,T.Species
-,(CASE WHEN T.Number_isoforms=0 THEN 1 ELSE T.Number_isoforms END) Number_isoforms
-,T.Protein_class_desc
-,T.Protein_class_short
-,T.Synonyms
-,LENGTH(T.Sequence) as number_of_residues
-FROM Targets T
-WHERE Target_id in ('%s')""" % gene_ids,
-	                'domains': """SELECT
- D.Target_id ID,
- GROUP_CONCAT(D.domain SEPARATOR '\n') AS domain
-  FROM
-(SELECT
-   D.Target_id
-  ,CONCAT(D.source_name,'\n',GROUP_CONCAT(CONCAT('\t',D.Domain_name,' (',D.Domain_start,'-',D.Domain_stop,')') ORDER BY D.Domain_start SEPARATOR '\n')) as domain
-FROM Domain_targets D
-  WHERE D.Target_id in ('%s')
-	GROUP BY D.Target_id,D.source_name) D
-GROUP BY D.Target_id""" % gene_ids,
-	                'mutant': """SELECT
-  Target_id ID,
-  GROUP_CONCAT(CONCAT('(',start,') ',previous,'-->',new,' comment: ',SUBSTRING_INDEX(comment,'.',1),'; in domains: ',domains) ORDER BY start SEPARATOR '\n') as MUTANT
-  FROM modifications
-	WHERE mod_type ='MUTAGEN'
-	AND Target_id in ('%s')
-GROUP BY Target_id""" % gene_ids,
-	                'variant': """SELECT
-  Target_id ID,
-  concat(substring_index(GROUP_CONCAT(CONCAT('(',start,') ',previous,'-->',new,' comment: ',SUBSTRING_INDEX(comment,'.',1),'; in domains: ',domains) ORDER BY start SEPARATOR '\n'),'\n',15),case when count(comment) > 15 THEN  concat('\n+ ',count(comment)-15,' others') ELSE '' END)  as VARIANT
-  FROM modifications
-	WHERE mod_type = 'VAR'
-	AND Target_id in ('%s')
-GROUP BY Target_id""" % gene_ids,
-	                'pdb': """SELECT
-  T.Target_id ID,
-  concat(substring_index(GROUP_CONCAT(CONCAT(T.PDB_code,': ',T.n_residues,' residues (',T.start_stop,', ',T.P_seq,'%%) Chain(s): ',T.Chain,' Domain(s): ',CASE WHEN T.domain is NULL THEN '' ELSE T.domain END,' (',T.Technique,': ',T.Resolution,')') ORDER BY T.P_seq DESC SEPARATOR '\n'),'\n',15),case when count(T.PDB_code) > 15 THEN  concat('\n+ ',count(T.PDB_code)-15,' others') ELSE '' END) AS PDB
-  FROM
-  (SELECT
-  C.Target_id,
-  C.PDB_code,
-  C.Chain_id,
-  C.n_residues,
-  C.start_stop,
-  ROUND(C.n_residues/LENGTH(T.Sequence)*100) AS "P_seq",
-  GROUP_CONCAT(DISTINCT C.Chain ORDER BY C.Chain) AS Chain,
-  GROUP_CONCAT(DISTINCT DT.Domain_name ORDER BY DT.Domain_start) AS domain,
-  DT.Domain_name,
-  P.Technique,
-  P.Resolution
-  FROM (SELECT * FROM PDB_Chains C WHERE C.Target_id in ('%s')) C
-LEFT JOIN PDB P
-	ON C.PDB_code=P.PDB_code
-LEFT JOIN PDBChain_Domain D
-	ON C.Chain_id=D.Chain_id
-LEFT JOIN Domain_targets DT
-	ON D.Domain_id=DT.domain_id
-LEFT JOIN Targets T
-	ON C.Target_id = T.Target_id
-GROUP BY C.Target_id,C.PDB_code)T
-	GROUP BY T.Target_id""" % gene_ids,
-	                'blast': """SELECT
-  Query_target_id as ID,
-concat(substring_index(GROUP_CONCAT(CONCAT(Hit_gene_name,'_',Hit_gene_species,' (',similarity,'%%)') ORDER BY similarity DESC SEPARATOR '\n'),'\n',10),case when count(Hit_gene_name) > 10 THEN  concat('\n+ ',count(Hit_gene_name)-10,' others') ELSE '' END) as protein_blast
-  FROM protein_blast
-	WHERE Query_target_id in ('%s')
-GROUP BY Query_target_id""" % gene_ids,
-	                'pdbblast': """SELECT
-  Query_target_id as ID,
-concat(substring_index(GROUP_CONCAT(CONCAT(Hit_PDB_code,' Chain: ',Chain_Letter,' (',Hit_gene_name,'_',Hit_gene_species,' - ',similarity,'%%)') ORDER BY similarity DESC SEPARATOR '\n'),'\n',10),case when count(Hit_gene_name) > 10 THEN  concat('\n+ ',count(Hit_gene_name)-10,' others') ELSE '' END) as pdb_blast
-  FROM `3D_Blast`
-	WHERE Query_target_id in ('%s')
-GROUP BY Query_target_id""" % gene_ids,
-	                'pockets': """SELECT
-  P.Target_id ID,
-  GROUP_CONCAT(P.pockets_domains SEPARATOR '\n') pockets
-FROM
-(SELECT
-  POCK.Target_id,
-  CONCAT(POCK.Domain_name,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',POCK.PDB_code,': Druggability_score=',POCK.DrugScore,' Volume=',POCK.volume,' Area=',POCK.total_sasa,' (',POCK.Fraction_apolar,'%% apolar)(',POCK.Pocket_number,')')ORDER BY POCK.DrugScore DESC SEPARATOR '\n'),'\n',3),case when count(POCK.Pocket_number) > 3 THEN  concat('\n\t+ ',count(POCK.Pocket_number)-3,' others') ELSE '' END)) AS pockets_domains
-  FROM
-(SELECT T1.*,
-  (CASE WHEN T1.Domain_id='other' THEN 'other' WHEN T1.Domain_id is NULL THEN 'other' ELSE D.Domain_name END) Domain_name
-  FROM
-(SELECT
-  FP.Target_id,
-  FP.PDB_code,
-  FP.Pocket_number,
-  FP.Score,
-  FP.DrugScore,
-  FP.total_sasa,
-  ROUND((FP.apolar_sasa/FP.total_sasa)*100,1) AS Fraction_apolar,
-  FP.volume,
-  FPD.Domain_id
-  FROM (SELECT * FROM fPockets WHERE druggable='TRUE'
-  AND blast='FALSE' AND Target_id in ('%s'))FP
-  LEFT JOIN fPockets_Domain FPD
-	ON FP.Pocket_id=FPD.Pocket_id
-) T1
-LEFT JOIN Domain_targets D
-	ON T1.Domain_id=D.domain_id) POCK
-GROUP BY POCK.Target_id,POCK.Domain_name) P
-GROUP BY P.Target_id""" % gene_ids,
-	                'altpockets': """SELECT
-  ALT_POCK.Target_id ID,
-  GROUP_CONCAT(ALT_POCK.pocket_gene_name SEPARATOR '\n') alt_pockets
-FROM
-(SELECT POCK.Target_id,
-	CONCAT(POCK.Hit_gene_name,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',POCK.PDB_code,'(Similarity=',ROUND(POCK.similarity),'%%): Druggability_score=',ROUND(POCK.DrugScore,2),' Volume=',ROUND(POCK.volume,1),' Area=',ROUND(POCK.total_sasa,1),' (',ROUND(POCK.Fraction_apolar),'%% apolar)(',POCK.Pocket_number,')')ORDER BY POCK.similarity DESC,POCK.DrugScore DESC SEPARATOR '\n'),'\n',3),case when count(POCK.Pocket_number) > 3 THEN  concat('\n\t+ ',count(POCK.Pocket_number)-3,' others') ELSE '' END)) AS pocket_gene_name
-FROM
-(SELECT
-  FP.Target_id,
-  FP.PDB_code,
-  FP.Pocket_number,
-  FP.Score,
-  FP.DrugScore,
-  FP.total_sasa,
-  ROUND((FP.apolar_sasa/FP.total_sasa)*100,1) AS Fraction_apolar,
-  FP.volume,
-  3D.Hit_PDB_code,
-  3D.Hit_gene_name,
-  3D.similarity
-  FROM (SELECT * FROM fPockets WHERE Target_id in ('%s') AND druggable='TRUE' AND blast='TRUE') FP
-	LEFT JOIN 3D_Blast 3D
-	ON 3D.Query_target_id=FP.Target_id AND 3D.Hit_PDB_code=FP.PDB_code
-  WHERE 3D.similarity>=70) POCK
-GROUP BY POCK.Target_id,POCK.Hit_gene_name) ALT_POCK
-GROUP BY ALT_POCK.Target_id""" % gene_ids,
-	                'disease_expression': """SELECT
-  T1.Target_id ID,
-  concat(substring_index(GROUP_CONCAT(CASE WHEN T1.up is null THEN null ELSE CONCAT(T1.up,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END))END ORDER BY T1.t_stat DESC SEPARATOR '\n'),'\n',20),case when count(T1.up) > 20 THEN  concat('\n+ ',count(T1.up)-20,' others') ELSE '' END) AS upregulated_in_disease
-,  concat(substring_index(GROUP_CONCAT(CASE WHEN T1.down is null THEN null ELSE CONCAT(T1.down,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END))END ORDER BY T1.t_stat SEPARATOR '\n'),'\n',20),case when count(T1.down) > 20 THEN  concat('\n+ ',count(T1.down)-20,' others') ELSE '' END) AS downregulated_in_disease
-
-FROM
-	(SELECT *,
-	   (CASE WHEN t_stat<0 THEN disease END) AS down,
-	  (CASE WHEN t_stat>=0 THEN disease END) AS up
-	  FROM
-( SELECT
-  disease,
-  avg(t_stat) as t_stat,
-  stddev(t_stat) as std_dev_t,
-  count(t_stat) as n_number,
-  Target_id
-  FROM diff_exp_disease
-	WHERE t_stat > 5 or t_stat < -5
-	AND Target_id in ('%s')
-  GROUP BY Target_id,disease
-  ) T1
-	) T1
-GROUP BY T1.Target_id""" % gene_ids,
-	                'tissue_expression': """SELECT
-  T1.Target_id ID,
-  GROUP_CONCAT(CASE WHEN T1.up is null THEN null ELSE CONCAT(T1.up,' (T-stat=',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END)) END ORDER BY T1.t_stat DESC SEPARATOR '\n') AS overexpressed_in,
-  GROUP_CONCAT(CASE WHEN T1.down is null THEN null ELSE CONCAT(T1.down,' (T-stat= ',round(T1.t_stat,1),CASE WHEN T1.n_number>1 THEN CONCAT(' +/- ',ROUND(T1.std_dev_t,2)) ELSE '' END,')',(CASE WHEN T1.n_number>1 THEN CONCAT('(n=',T1.n_number,')') ELSE '' END)) END ORDER BY T1.t_stat SEPARATOR '\n') AS underexpressed_in
-  FROM
-( SELECT
-  Tissue,
-  avg(t_stat) as t_stat,
-  stddev(t_stat) as std_dev_t,
-  count(t_stat) as n_number,
-  Target_id,
-  (CASE WHEN t_stat<0 THEN Tissue END) AS down,
-  (CASE WHEN t_stat>=0 THEN Tissue END) AS up
-FROM diff_exp_tissue
-WHERE t_stat > 5 or t_stat < -5
-  AND Target_id in ('%s')
-GROUP BY Target_id,Tissue)T1
-GROUP BY T1.Target_id""" % gene_ids,
-	                'pathways': """SELECT
-  P.Target_id ID,
-  GROUP_CONCAT(P.pathways SEPARATOR '\n') AS pathways
-  FROM
-(SELECT
-  Target_id,
-  CONCAT(pathway_dataset,'\n',GROUP_CONCAT(CONCAT('\t',pathway_name) ORDER BY pathway_name SEPARATOR '\n')) AS pathways
-  FROM pathways
-	WHERE pathway_dataset='KEGG pathways data set' AND Target_id in ('%s')
-GROUP BY Target_id,pathway_dataset) P
-GROUP BY P.Target_id""" % gene_ids,
-	                'phenotypes': """SELECT
-  T1.Target_id ID,
-  GROUP_CONCAT(genotype_list ORDER BY T1.zygosity SEPARATOR '\n') AS genotypes,
-  GROUP_CONCAT(T1.lethal_phenotype SEPARATOR '\n') lethal_phenotype
-  ,GROUP_CONCAT(T1.normal_genotype SEPARATOR '\n') normal_phenotype_for
-  FROM
-(SELECT
- T1.Target_id,
-  T1.zygosity,
-  CONCAT(' [',T1.zygosity,']\n',GROUP_CONCAT(CONCAT('\t',T1.normal_genotype) SEPARATOR '\n')) as normal_genotype,
-  CONCAT(' [',T1.genotype,']\n',GROUP_CONCAT(DISTINCT CONCAT('\t',T1.lethal_phen) SEPARATOR '\n')) as lethal_phenotype,
-  CONCAT(T1.zygosity,'\n',concat(substring_index(GROUP_CONCAT(CONCAT('\t',T1.genotype,' [',T1.organism,']',(CASE WHEN T1.phen_list like 'no abnormal phenotype detected' THEN ' [NORMAL PHENOTYPE]' WHEN T1.phen_list like '%%lethal%%' THEN ' [LETHAL PHENOTYPE OBSERVED]' ELSE '[P]' END)) ORDER BY T1.genotype SEPARATOR '\n'),'\n',5),case when count(T1.genotype) > 5 THEN  concat('\n\t+ ',count(T1.genotype)-5,' others') ELSE '' END)) as genotype_list
-  FROM
-(SELECT
-  PHEN.Target_id,
-  PHEN.genotype,
-  (CASE WHEN PHEN.zygosity is NULL THEN 'not declared' ELSE PHEN.zygosity END) zygosity,
-  PHEN.organism,
-  GROUP_CONCAT(DISTINCT PHEN.Phenotype SEPARATOR ' ; ') AS phen_list,
-  GROUP_CONCAT(DISTINCT (CASE WHEN PHEN.Phenotype like '%%lethal%%' THEN PHEN.Phenotype END) SEPARATOR '\n\t') AS lethal_phen,
-  GROUP_CONCAT(DISTINCT (CASE WHEN PHEN.Phenotype like 'no abnormal phenotype detected' THEN PHEN.genotype END) SEPARATOR '\n') AS normal_genotype
- FROM phenotype PHEN
-   WHERE Target_id in ('%s')
-	GROUP BY PHEN.Target_id,PHEN.genotype,PHEN.zygosity)T1
-GROUP BY T1.Target_id,T1.zygosity)T1
-GROUP BY T1.Target_id""" % gene_ids,
-	                'diseases': """SELECT
-  Target_id ID,
-  GROUP_CONCAT(CONCAT(disease_name,' [',disease_id,']') ORDER BY disease_name SEPARATOR '\n') AS disease
-  FROM disease
-	WHERE Target_id in ('%s')
-GROUP BY Target_id""" % gene_ids,
-	                'protexpression_sel': """SELECT PROT_SEL.Target_id ID
-	  ,PROT_SEL.max_organ
-	  ,ROUND(PROT_SEL.Selectivity_entropy,3) AS expression_selectivity
-  FROM protein_expression_selectivity PROT_SEL
-WHERE PROT_SEL.Target_id in ('%s')""" % gene_ids,
-	                'protAtlas': """SELECT
-  T1.Target_id ID,
-  GROUP_CONCAT(CONCAT(T1.level_graph,(CASE
-					   WHEN 15-T1.n_cell = 0 THEN ''
-					   WHEN 15-T1.n_cell = 1 THEN '      '
-					   WHEN 15-T1.n_cell = 2 THEN '            '
-					   WHEN 15-T1.n_cell = 3 THEN '                  '
-					   WHEN 15-T1.n_cell = 4 THEN '                        '
-					   WHEN 15-T1.n_cell = 5 THEN '                              '
-					   WHEN 15-T1.n_cell = 6 THEN '                                    '
-					   WHEN 15-T1.n_cell = 7 THEN '                                          '
-					   WHEN 15-T1.n_cell = 8 THEN '                                                '
-					   WHEN 15-T1.n_cell = 9 THEN '                                                      '
-					   WHEN 15-T1.n_cell = 10 THEN '                                                            '
-					   WHEN 15-T1.n_cell = 11 THEN '                                                                  '
-					   WHEN 15-T1.n_cell = 12 THEN '                                                                        '
-					   WHEN 15-T1.n_cell = 13 THEN '                                                                              '
-					   WHEN 15-T1.n_cell = 14 THEN '                                                                                    '
-					   WHEN 15-T1.n_cell = 15 THEN '                                                                                          '
-
-					   END),'\t',T1.organ,' (',ROUND(T1.avg_level_num,1),')') ORDER BY T1.avg_level_num DESC SEPARATOR '\n') AS protein_atlas_expression
-  FROM
-(SELECT
-  T1.Target_id,
-  T1.organ,
-  GROUP_CONCAT(CONCAT(T1.level_graph) ORDER BY T1.level_numeric DESC SEPARATOR '') level_graph,
-  SUM(T1.level_numeric) level_num,
-  AVG(T1.level_numeric) avg_level_num,
-  COUNT(T1.cell) n_cell
-  FROM
-(SELECT
-	T1.Target_id,
-	T1.organ,
-	T1.tissue,
-	T1.cell,
-	CASE WHEN value=0 THEN '[ -]' WHEN value=1 THEN '[1]' WHEN value=2 THEN '[2]' WHEN value=3 THEN '[3]' END AS level_graph,
-	T1.value AS level_numeric
-  FROM protein_expression_levels T1
-  WHERE T1.Target_id in ('%s')) T1
-GROUP BY T1.Target_id,T1.organ)T1
-GROUP BY T1.Target_id""" % gene_ids,
-	                'bioactivities': """SELECT
-	B.ID,
-	COUNT(DISTINCT L.lig_id) AS Number_of_ligands,
-	MAX(L.max_phase) AS Max_phase
-	FROM
-	(SELECT B.*,C.target_id as ID FROM bioactivities B
-	INNER JOIN (SELECT * FROM Crossref C WHERE C.target_id in ('%s')) C
-	on B.Target_id=C.Chembl_id) B
-	LEFT JOIN ligands L
-	on B.lig_id=L.lig_id
-	GROUP BY B.target_id""" % gene_ids,
-	                'assays': """SELECT
-  AT.target_id ID,
-  GROUP_CONCAT(DISTINCT A.bioactivity_type ORDER BY A.bioactivity_type SEPARATOR '\n') AS Assay_types
-  FROM (SELECT * FROM assay_target AT WHERE AT.target_id in ('%s')) AT
-  LEFT JOIN assays A
-	ON A.assay_id=AT.assay_id
-GROUP BY AT.target_id""" % gene_ids,
-	                'gwas': """SELECT
-   G.Target_id ID
-  ,GROUP_CONCAT(CONCAT('Phenotype: ',G.phenotype,' Organism: ',G.organism,' (',G.first_author,'-',G.publication_year,') doi:',G.doi,' PID:',G.pubmed_id) ORDER BY G.phenotype,G.publication_year DESC SEPARATOR '\n') as gwas
-FROM gwas G
-  WHERE G.Target_id in ('%s')
-	GROUP BY G.Target_id""" % gene_ids,
-	                'commercial': """SELECT
-   target_id ID,
-   GROUP_CONCAT(CONCAT('Affinity: ',affinity_type,': ',affinity_value,affinity_unit,' (price: ',price,') (website: ',website,')') SEPARATOR '\n') as commercially_available
-FROM purchasable_compounds
-WHERE target_id in ('%s') AND affinity_value <= 500
-GROUP BY target_id""" % gene_ids
-	                }
-
-	results = {qname: pd.read_sql(query, con=dbase.db) for qname, query in list_queries.items()}
-
-	if not results['gen'].empty:
-		all = pd.DataFrame.from_records(results['gen'])
+	if pubmed_email:
+		pubmed = {'Target_id': [], 'total # publications': [], 'number of Dementia publications': []}
+		for name,id in list_targets.items():
+			pubmed['Target_id'].append(id)
+			pubmed['number of Dementia publications'].append(
+				pubmed_search(name, pubmed_email, return_number=True, mesh_term='Dementia'))
+			pubmed['total # publications'].append(pubmed_search(name, pubmed_email, return_number=True))
+		# TODO: Mesh term is hard-coded here
+		pubmed = pd.DataFrame.from_dict(pubmed)
 	else:
-		print(
-			"[EXPORT ERROR]: Something went wrong during the export process \nYour requested genes might not be present in the database, or the database is not available at the moment\nPlease try again later")
-		return "Failure"
+		pubmed = pd.DataFrame()
 
-	for name, res in results.items():
-		if name == 'gen':
-			continue
-		else:
-			all = all.merge(res, on='ID', how='left')
-	all = all.merge(pubmed, on='ID', how='left')
+	gene_ids = "','".join(list_targets.values())
 
-	dbase.close()
-	header = ['Gene_name', 'Uniprot_id', 'Synonyms', 'Species', 'pathways', 'disease', 'upregulated_in_disease',
-	          'downregulated_in_disease', 'gwas', 'genotypes', 'lethal_phenotype', 'normal_phenotype_for',
-	          'overexpressed_in', 'underexpressed_in', 'protein_atlas_expression', 'max_organ',
-	          'expression_selectivity',
-	          'Number_isoforms', 'Protein_class_desc', 'Protein_class_short', 'number_of_residues', 'domain', 'MUTANT',
-	          'VARIANT', 'PDB', 'pdb_blast', 'protein_blast', 'pockets', 'alt_pockets', 'Number_of_ligands',
-	          'commercially_available', 'Max_phase', 'Assay_types', 'total # publications'
-		, 'number of Dementia publications']
-	all = all[header]
+	data = td.get_descriptors_list(gene_ids,targetdb=targetDB,tcrdDB=tcrd)
+	data = data.merge(pubmed,on='Target_id',how='left')
+	list_done = data.Target_id.values.tolist()
+
+	for name,id in list_targets.items():
+		if id not in list_done:
+			not_in_db['Not present in DB'].append(name)
+	not_in_db = pd.DataFrame.from_dict(not_in_db)
+
 	t = time.strftime("%d%b%Y_%H%M%S")
-	writer = pd.ExcelWriter(output_lists_path + 'Export_' + str(len(all)) + '_entries_' + t + '.xlsx',
+	writer = pd.ExcelWriter(output_lists_path + 'Export_' + str(len(data)) + '_entries_' + t + '.xlsx',
 	                        engine='xlsxwriter')
-	all.to_excel(writer, 'Druggability_list', index=False)
+	data.to_excel(writer, 'Druggability_list', index=False)
 	not_in_db.to_excel(writer, 'Not in DB', index=False)
 	writer.save()
-	print("[EXPORT]: Excel file: ", '[Export_' + str(len(all)) + '_entries_' + t + '.xlsx]', ' successfully generated')
+	print("[EXPORT]: Excel file: ", '[Export_' + str(len(data)) + '_entries_' + t + '.xlsx]', ' successfully generated')
 	return "Success"
 
 
@@ -1292,11 +1052,53 @@ if __name__ == "__main__":
 	                         "information available) Caution : 1 File created per target",
 	                    action='store_true',
 	                    default=False)
-
-	parser.add_argument('-pubmed_email', '--email',
-	                    help='enter your email address (required for the pubmed search', metavar='',
-	                    type=str)
+	parser.add_argument('-update_config', '--update_config',
+	                    help="use this if you want to update the config file",
+	                    action='store_true',
+	                    default=False)
 	args = parser.parse_args()
+
+	update_config = args.update_config
+	while True:
+		config = configparser.ConfigParser()
+		config_file_path = os.path.expanduser('~') + '/.druggability/config.ini'
+		os.makedirs(os.path.dirname(config_file_path), exist_ok=True)
+
+		if os.path.exists(config_file_path) and not update_config:
+			config.read(config_file_path)
+			todo = []
+			for var_name in config['database_path']:
+				if not os.path.isfile(config['database_path'][var_name]):
+					todo.append(var_name)
+			for var_name in config['output_path']:
+				if not os.path.isdir(config['output_path'][var_name]):
+					todo.append(var_name)
+
+			if todo:
+				config = get_config_from_user(config, todo=todo)
+				with open(config_file_path, 'w') as cf:
+					config.write(cf)
+			else:
+				# =============================# PATH TO SAVE REPORT FILES #============================#
+				output_lists_path = config['output_path']['list']
+				output_single_path = config['output_path']['single']
+				# =============================# PATH TO SQLITE DB #============================#
+
+				targetDB = config['database_path']['targetdb']
+				chembl_24 = config['database_path']['chembl']
+				tcrd = config['database_path']['tcrd']
+				pubmed_email = config['pubmed_email']['email']
+				break
+		else:
+			config['database_path'] = {}
+			config['output_path'] = {}
+			config['pubmed_email'] = {}
+			config = get_config_from_user(config)
+			with open(config_file_path, 'w') as cf:
+				config.write(cf)
+			update_config = False
+
+
 
 	while True:
 		if args.in_file:
@@ -1342,7 +1144,7 @@ if __name__ == "__main__":
 		for gene_id in gene_dict.values():
 			get_single_excel(gene_id)
 	elif args.report_list:
-		get_list_excel(gene_dict.keys())
+		get_list_excel(gene_dict)
 	else:
 		print('ERROR: Please provide a report type "-rl" for a list report, "-rs" for a single target report')
 		parser.print_help()

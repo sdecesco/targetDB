@@ -20,13 +20,11 @@ from Bio import SwissProt
 from intermine.webservice import Service
 from intermine.errors import ServiceError, WebserviceError
 from druggability3 import pocket_finder as pocket
-from druggability3 import db_connection as db
-from druggability3 import pdb_parser
-from protein_atlas_api import proteinatlas as patlas
+from druggability3.utils import db_connection as db, pdb_parser
+from druggability3.protein_atlas_api import proteinatlas as patlas
 from Bio.Seq import Seq
 from Bio import pairwise2
 from Bio.SubsMat.MatrixInfo import blosum62
-from operator import itemgetter
 from Bio.Blast import NCBIXML
 import pandas as pd
 from sqlalchemy import create_engine
@@ -644,7 +642,7 @@ def get_pdb_seq_info(pdb_list, domain, isoforms):
 			pdb_list[keys]['sequences'] = {}
 			continue
 		seq = pdb_parser.get_sequence(keys, pdb_list[keys]['path'],
-									  pdb_list[keys]['Chain'], domain)
+		                              pdb_list[keys]['Chain'], domain)
 		# chain_done = []
 		# for chain in seq.keys():
 		#     if seq[chain]['chain_name'] not in pdb_list[keys]['Chain']:
