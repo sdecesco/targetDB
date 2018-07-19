@@ -1,38 +1,14 @@
 #!/usr/bin/env python
 
-try:
-	import urllib.request as urllib
-	from urllib.error import *
-except ImportError:
-	import urllib
-	from urllib2 import *
-
-import argparse, sys, os, sqlite3, re,requests,time,configparser,readline
+import urllib.request as urllib
+import argparse, sys, os, sqlite3, re, requests, time, configparser
+from tkinter.filedialog import askopenfilename,askdirectory
+from tkinter.simpledialog import askstring
 from Bio import Entrez, Medline
 from druggability3 import target_descriptors as td
 from druggability3 import target_features as tf
 from druggability3 import cns_mpo as mpo
-from druggability3.utils import tabcompleter as t
 import pandas as pd
-
-tab_comp = t.tabCompleter()
-readline.set_completer_delims('\t')
-readline.parse_and_bind("tab: complete")
-readline.set_completer(tab_comp.pathCompleter)
-
-# #TODO: find a way to get the path set during the installation and/or ask user for the path and store in .ini file
-# # =============================# PATH TO SAVE REPORT FILES #============================#
-#
-# output_lists_path = '/data/sdecesco/databases/druggability/outputs/lists/'
-# output_single_path = '/data/sdecesco/databases/druggability/outputs/single_targets/'
-#
-# # =============================# PATH TO SQLITE DB #============================#
-#
-# data_path = '/'.join(str(td.__file__).split('/')[:-1])+'/data/'
-#
-# targetDB = data_path+'TargetDB_v1.db'
-# chembl_24 = data_path+'chembl_24.db'
-# tcrd = data_path+'tcrd_v5.2.0.db'
 
 
 def get_config_from_user(config, todo=['chembl', 'targetdb', 'tcrd', 'single', 'list', 'email']):
@@ -46,8 +22,8 @@ def get_config_from_user(config, todo=['chembl', 'targetdb', 'tcrd', 'single', '
 			print('========================================================')
 			print('================ CHEMBL SQLITE FILE ====================')
 			print('=====================(optional)=========================\n')
-			chembldb_path = input(
-				"Please navigate to the chembl sqlite database (optional - leave blank if you only want to generate reports) \n")
+			chembldb_path = askopenfilename(title='Select ChEMBL sqlite database', initialdir='/',
+			                           filetypes=[("sqliteDB", "*.db")])
 			if os.path.exists(chembldb_path):
 				path_exist = True
 			else:
@@ -59,7 +35,8 @@ def get_config_from_user(config, todo=['chembl', 'targetdb', 'tcrd', 'single', '
 			print('========================================================')
 			print('=============== TargetDB SQLITE FILE ===================')
 			print('========================================================\n')
-			targetDB_path = input("Please navigate to the TargetDB sqlite database \n")
+			targetDB_path = askopenfilename(title='Select TargetDB sqlite database', initialdir='/',
+						                           filetypes=[("sqliteDB", "*.db")])
 			if os.path.exists(targetDB_path):
 				path_exist = True
 			else:
@@ -71,7 +48,8 @@ def get_config_from_user(config, todo=['chembl', 'targetdb', 'tcrd', 'single', '
 			print('========================================================')
 			print('================= tcrd SQLITE FILE =====================')
 			print('========================================================\n')
-			tcrd_path = input("Please navigate to the Tcrd sqlite database \n")
+			tcrd_path = askopenfilename(title='Select tcrd (PHAROS) sqlite database', initialdir='/',
+									                           filetypes=[("sqliteDB", "*.db")])
 			if os.path.exists(tcrd_path):
 				path_exist = True
 			else:
@@ -83,8 +61,7 @@ def get_config_from_user(config, todo=['chembl', 'targetdb', 'tcrd', 'single', '
 			print('========================================================')
 			print('=========== SINGLE TARGET OUTPUT FOLDER ================')
 			print('========================================================\n')
-			single_output = input(
-				"Please indicate the path to the folder in which to output the single target reports \n")
+			single_output = askdirectory(title='Select directory to save single output files')
 			if os.path.isdir(single_output):
 				path_exist = True
 			else:
@@ -96,20 +73,34 @@ def get_config_from_user(config, todo=['chembl', 'targetdb', 'tcrd', 'single', '
 			print('========================================================')
 			print('============= LIST TARGET OUTPUT FOLDER ================')
 			print('========================================================\n')
-			list_output = input("Please indicate the path to the folder in which to output the list target reports \n")
+			list_output = askdirectory(title='Select directory to save list output files')
 			if os.path.isdir(list_output):
 				path_exist = True
 			else:
 				print('[ERROR]: The folder you have entered does not exists \n\n')
 		config['output_path']['list'] = list_output
 	if 'email' in todo:
-		print('========================================================')
-		print('============= EMAIL FOR PUBMED SEARCH ==================')
-		print('========================================================\n')
-		pubmed_email = input(
-			"Please enter your email (used for pubmed searches - pubmed api requires an email for batch requests) \n")
+		email_correct = False
+		while email_correct == False:
+			print('========================================================')
+			print('============= EMAIL FOR PUBMED SEARCH ==================')
+			print('========================================================\n')
+			pubmed_email = askstring("Enter your email",'Enter your email address (used for pubmed searches - pubmed api requires an email for batch requests)')
+			if is_email(pubmed_email):
+				email_correct = True
+			else:
+				print('[ERROR]: The email address you have entered is invalid (correct format: youraddress@domain.com) \n')
+
 		config['pubmed_email']['email'] = pubmed_email
+
 	return config
+
+
+def is_email(email):
+	match = re.match('^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$', email)
+	if match is None:
+		return False
+	return True
 
 
 def get_list_entries():
@@ -232,27 +223,27 @@ def retryer_pubmed(max_retries=10, timeout=5):
 @retryer_pubmed(max_retries=10, timeout=5)
 def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	dict_medline = {"AB": "Abstract", "CI": "Copyright Information", "AD": "Affiliation", "AUID": "Author ID",
-					"IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
-					"FAU": "Full Author", "CN": "Corporate Author", "DCOM": "Date Completed", "DA": "Date Created",
-					"LR": "Date Last Revised", "DEP": "Date of Electronic Publication", "DP": "Date of Publication",
-					"EDAT": "Entrez Date", "GS": "Gene Symbol", "GN": "General Note", "GR": "Grant Number",
-					"IR": "Investigator Name", "FIR": "Full Investigator Name", "IS": "ISSN", "IP": "Issue",
-					"TA": "Journal Title Abbreviation", "JT": "Journal Title", "LA": "Language",
-					"LID": "Location Identifier", "MID": "Manuscript Identifier", "MHDA": "MeSH Date",
-					"MH": "MeSH Terms", "JID": "NLM Unique ID", "RF": "Number of References", "OAB": "Other Abstract",
-					"OCI": "Other Copyright Information", "OID": "Other ID", "OT": "Other Term",
-					"OTO": "Other Term Owner", "OWN": "Owner", "PG": "Pagination", "PS": "Personal Name as Subject",
-					"FPS": "Full Personal Name as Subject", "PL": "Place of Publication",
-					"PHST": "Publication History Status", "PST": "Publication Status", "PT": "Publication Type",
-					"PUBM": "Publishing Model", "PMC": "PubMed Central Identifier", "PMID": "PMID",
-					"RN": "Registry Number/EC Number", "NM": "Substance Name", "SI": "Secondary Source ID",
-					"SO": "Source", "SFM": "Space Flight Mission", "STAT": "Status", "SB": "Subset", "TI": "Title",
-					"TT": "Transliterated Title", "VI": "Volume", "CON": "Comment on", "CIN": "Comment in",
-					"EIN": "Erratum in", "EFR": "Erratum for", "CRI": "Corrected and Republished in",
-					"CRF": "Corrected and Republished from", "PRIN": "Partial retraction in",
-					"PROF": "Partial retraction of", "RPI": "Republished in", "RPF": "Republished from",
-					"RIN": "Retraction in", "ROF": "Retraction of", "UIN": "Update in", "UOF": "Update of",
-					"SPIN": "Summary for patients in", "ORI": "Original report in"}
+	                "IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
+	                "FAU": "Full Author", "CN": "Corporate Author", "DCOM": "Date Completed", "DA": "Date Created",
+	                "LR": "Date Last Revised", "DEP": "Date of Electronic Publication", "DP": "Date of Publication",
+	                "EDAT": "Entrez Date", "GS": "Gene Symbol", "GN": "General Note", "GR": "Grant Number",
+	                "IR": "Investigator Name", "FIR": "Full Investigator Name", "IS": "ISSN", "IP": "Issue",
+	                "TA": "Journal Title Abbreviation", "JT": "Journal Title", "LA": "Language",
+	                "LID": "Location Identifier", "MID": "Manuscript Identifier", "MHDA": "MeSH Date",
+	                "MH": "MeSH Terms", "JID": "NLM Unique ID", "RF": "Number of References", "OAB": "Other Abstract",
+	                "OCI": "Other Copyright Information", "OID": "Other ID", "OT": "Other Term",
+	                "OTO": "Other Term Owner", "OWN": "Owner", "PG": "Pagination", "PS": "Personal Name as Subject",
+	                "FPS": "Full Personal Name as Subject", "PL": "Place of Publication",
+	                "PHST": "Publication History Status", "PST": "Publication Status", "PT": "Publication Type",
+	                "PUBM": "Publishing Model", "PMC": "PubMed Central Identifier", "PMID": "PMID",
+	                "RN": "Registry Number/EC Number", "NM": "Substance Name", "SI": "Secondary Source ID",
+	                "SO": "Source", "SFM": "Space Flight Mission", "STAT": "Status", "SB": "Subset", "TI": "Title",
+	                "TT": "Transliterated Title", "VI": "Volume", "CON": "Comment on", "CIN": "Comment in",
+	                "EIN": "Erratum in", "EFR": "Erratum for", "CRI": "Corrected and Republished in",
+	                "CRF": "Corrected and Republished from", "PRIN": "Partial retraction in",
+	                "PROF": "Partial retraction of", "RPI": "Republished in", "RPF": "Republished from",
+	                "RIN": "Retraction in", "ROF": "Retraction of", "UIN": "Update in", "UOF": "Update of",
+	                "SPIN": "Summary for patients in", "ORI": "Original report in"}
 	pubmed_url = 'https://www.ncbi.nlm.nih.gov/pubmed/'
 
 	Entrez.email = email
@@ -276,15 +267,15 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	df = pd.DataFrame.from_records(data)
 	df.rename(index=str, columns=dict_medline, inplace=True)
 	pub_type_list = ['Journal Article', 'Case Reports', 'Clinical Trial', 'Comparative Study', 'Letter',
-					 'Meta-Analysis', 'Review']
+	                 'Meta-Analysis', 'Review']
 	for pub_type in pub_type_list:
 		df[pub_type] = [pub_type in i for i in df['Publication Type'].values]
 	columns_to_keep = ['Abstract', 'Affiliation', 'Author', 'Date of Publication',
-					   'Journal Title', 'MeSH Terms', 'Other Term',
-					   'Other Term Owner', 'Place of Publication', 'PMID',
-					   'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
-					   'Journal Article', 'Case Reports', 'Clinical Trial',
-					   'Comparative Study', 'Letter', 'Meta-Analysis', 'Review']
+	                   'Journal Title', 'MeSH Terms', 'Other Term',
+	                   'Other Term Owner', 'Place of Publication', 'PMID',
+	                   'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
+	                   'Journal Article', 'Case Reports', 'Clinical Trial',
+	                   'Comparative Study', 'Letter', 'Meta-Analysis', 'Review']
 	for i in columns_to_keep:
 		if i not in df.columns:
 			df[i] = ''
@@ -336,23 +327,23 @@ def open_target_association(gene_id):
 	df = associations.to_dataframe()
 	df = df[(df['is_direct'] == True)]
 	cols = ['target.gene_info.symbol', 'disease.efo_info.therapeutic_area.labels', 'disease.efo_info.label',
-			'association_score.overall',
-			'association_score.datatypes.genetic_association',
-			'association_score.datatypes.known_drug',
-			'association_score.datatypes.literature',
-			'association_score.datatypes.animal_model',
-			'association_score.datatypes.affected_pathway',
-			'association_score.datatypes.rna_expression',
-			'association_score.datatypes.somatic_mutation']
+	        'association_score.overall',
+	        'association_score.datatypes.genetic_association',
+	        'association_score.datatypes.known_drug',
+	        'association_score.datatypes.literature',
+	        'association_score.datatypes.animal_model',
+	        'association_score.datatypes.affected_pathway',
+	        'association_score.datatypes.rna_expression',
+	        'association_score.datatypes.somatic_mutation']
 	rename = {'association_score.datatypes.affected_pathway': 'affected_pathway',
-			  'association_score.datatypes.animal_model': 'animal_model',
-			  'association_score.datatypes.genetic_association': 'genetic_association',
-			  'association_score.datatypes.known_drug': 'known_drug',
-			  'association_score.datatypes.literature': 'litterature_mining',
-			  'association_score.datatypes.rna_expression': 'rna_expression',
-			  'association_score.datatypes.somatic_mutation': 'somatic_mutation',
-			  'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
-			  'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
+	          'association_score.datatypes.animal_model': 'animal_model',
+	          'association_score.datatypes.genetic_association': 'genetic_association',
+	          'association_score.datatypes.known_drug': 'known_drug',
+	          'association_score.datatypes.literature': 'litterature_mining',
+	          'association_score.datatypes.rna_expression': 'rna_expression',
+	          'association_score.datatypes.somatic_mutation': 'somatic_mutation',
+	          'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
+	          'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
 	df = df[cols]
 	df = df.round(2)
 	df = df[df['association_score.overall'] > 0.05]
@@ -421,7 +412,7 @@ def get_single_excel(target_id):
 
 		# ================= GET THE DIFFERENT DATAFRAMES ====================#
 
-		res = tf.get_single_features(target_id,dbase=targetDB)
+		res = tf.get_single_features(target_id, dbase=targetDB)
 
 		# =================== FILLING THE WORKSHEETS ========================#
 
@@ -481,7 +472,7 @@ def get_single_excel(target_id):
 					else:
 						col = col + 1
 						wb_general_info.write(row, col, v, wrap)
-			target_desc = td.get_descriptors(target_id, targetdb=targetDB,tcrdDB=tcrd)
+			target_desc = td.get_descriptors(target_id, targetdb=targetDB, tcrdDB=tcrd)
 			target_score = td.make_score(target_desc)
 			spider_plot = td.make_spider_plot(target_score.loc[0].values, target_score.columns,
 			                                  target_name=res['general_info'].iloc[0]['Gene_name'])
@@ -999,7 +990,7 @@ def get_list_excel(list_targets):
 
 	if pubmed_email:
 		pubmed = {'Target_id': [], 'total # publications': [], 'number of Dementia publications': []}
-		for name,id in list_targets.items():
+		for name, id in list_targets.items():
 			pubmed['Target_id'].append(id)
 			pubmed['number of Dementia publications'].append(
 				pubmed_search(name, pubmed_email, return_number=True, mesh_term='Dementia'))
@@ -1011,11 +1002,11 @@ def get_list_excel(list_targets):
 
 	gene_ids = "','".join(list_targets.values())
 
-	data = td.get_descriptors_list(gene_ids,targetdb=targetDB,tcrdDB=tcrd)
-	data = data.merge(pubmed,on='Target_id',how='left')
+	data = td.get_descriptors_list(gene_ids, targetdb=targetDB, tcrdDB=tcrd)
+	data = data.merge(pubmed, on='Target_id', how='left')
 	list_done = data.Target_id.values.tolist()
 
-	for name,id in list_targets.items():
+	for name, id in list_targets.items():
 		if id not in list_done:
 			not_in_db['Not present in DB'].append(name)
 	not_in_db = pd.DataFrame.from_dict(not_in_db)
@@ -1073,7 +1064,8 @@ if __name__ == "__main__":
 			for var_name in config['output_path']:
 				if not os.path.isdir(config['output_path'][var_name]):
 					todo.append(var_name)
-
+			if not is_email(config['pubmed_email']['email']):
+				todo.append('email')
 			if todo:
 				config = get_config_from_user(config, todo=todo)
 				with open(config_file_path, 'w') as cf:
@@ -1097,8 +1089,6 @@ if __name__ == "__main__":
 			with open(config_file_path, 'w') as cf:
 				config.write(cf)
 			update_config = False
-
-
 
 	while True:
 		if args.in_file:

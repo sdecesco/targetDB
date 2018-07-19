@@ -860,8 +860,14 @@ def get_descriptors_list(target_id, targetdb=None, tcrdDB=None):
 	data = data.merge(results['kegg'].groupby('Target_id')['pathway_name'].count().reset_index().rename(
 		columns={'pathway_name': 'kegg_count'}), on='Target_id', how='left')
 
+	data = data.merge(results['reactome'].groupby('Target_id')['pathway_name'].apply('\n'.join).reset_index().rename(
+		columns={'pathway_name': 'reactome_list'}), on='Target_id', how='left')
+
+	data = data.merge(results['reactome'].groupby('Target_id')['pathway_name'].count().reset_index().rename(
+		columns={'pathway_name': 'reactome_count'}), on='Target_id', how='left')
+
 	data = data.merge(results['disease'].groupby('Target_id')['disease_id'].count().reset_index().rename(
-		columns={'disease_id': 'disease_count'}), on='Target_id', how='left')
+		columns={'disease_id': 'disease_count_uniprot'}), on='Target_id', how='left')
 	if not results['pockets'].empty:
 		data = data.merge(results['pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index(), on='Target_id',
 						  how='left')
@@ -1095,9 +1101,9 @@ def get_descriptors_list(target_id, targetdb=None, tcrdDB=None):
 	disease_clean = tcrd_res['disease'][
 		(tcrd_res['disease']['score'] > 1) & (~tcrd_res['disease']['doid'].isin(tcrd_res['disease']['parent'].unique()))]
 	disease_list = disease_clean.groupby('protein_id')['name'].unique().apply('\n'.join).reset_index().rename(
-		columns={'protein_id': 'id', 'name': 'disease_list'})
+		columns={'protein_id': 'id', 'name': 'disease_list_tcrd'})
 	disease_count = disease_clean.groupby('protein_id')['name'].nunique().reset_index().rename(
-		columns={'protein_id': 'id', 'name': 'disease_count'})
+		columns={'protein_id': 'id', 'name': 'disease_count_tcrd'})
 	disease_max = disease_clean.loc[disease_clean.groupby('protein_id')['score'].idxmax().values].drop(
 		['parent', 'doid', 'disease_id'], axis=1).rename(
 		columns={'protein_id': 'id', 'score': 'max_disease_score', 'name': 'name_max_disease'}).round(2)

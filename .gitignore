@@ -2,3 +2,11 @@
 \.idea/
 
 druggability3/data/
+
+
+
+build/
+
+dist/
+
+targetDB\.egg-info/
