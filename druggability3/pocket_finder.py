@@ -1,12 +1,11 @@
 #!/usr/bin/env python
-import glob
 import os
 import sys
 import subprocess
 import shutil
 import argparse
 from operator import itemgetter
-from druggability3 import pdb_parser as parser
+from druggability3.utils import pdb_parser as parser
 from Bio.PDB import *
 
 Bioparser = PDBParser(PERMISSIVE=1, QUIET=True)
@@ -98,11 +97,29 @@ def get_pockets(path, sphere_size=3.0, pdb_info=None, domain=None, alternate=Fal
             pdb_parsed = parser.parse_header(pdb_code, f)
             pdb_strip_path = str(f).rstrip('.pdb') + '_strip.pdb'
         if pdb_parsed.biomolecules:
-            chain_to_keep = pdb_parsed.biomolecules['1']
+            chain_to_keep = []
+            if pdb_info:
+                for biomolecule,chains in pdb_parsed.biomolecules.items():
+                    if not chain_to_keep:
+                        for c in pdb_info[pdb_code]['Chain']:
+                            if c in chains:
+                                chain_to_keep = pdb_parsed.biomolecules[biomolecule]
+                                break
+            elif alternate_pdb:
+                for biomolecule,chains in pdb_parsed.biomolecules.items():
+                    if alternate_pdb[pdb_code]['chain_letter'] in chains:
+                        chain_to_keep = pdb_parsed.biomolecules[biomolecule]
+                        break
+            else:
+                chain_to_keep = []
+
             structure = Bioparser.get_structure(pdb_code, f)
             io.set_structure(structure[0])
-            chain_select = ChainSelect(chain_to_keep)
-            io.save(pdb_strip_path, chain_select)
+            if chain_to_keep:
+                chain_select = ChainSelect(chain_to_keep)
+                io.save(pdb_strip_path, chain_select)
+            else:
+                io.save(pdb_strip_path)
         if alternate:
             info = None
         elif pdb_info:
@@ -184,17 +201,18 @@ def get_druggable_pockets(list_of_pockets):
     """Get a dict of PDB with a dict of Pockets object as entry, output a list of druggable pockets"""
     new_dict = {}
     for k in list_of_pockets.keys():
-        new_dict[k]={}
+        new_dict[k] = {}
         for p in list_of_pockets[k].keys():
             if list_of_pockets[k][p].druggable == 'TRUE':
-                new_dict[k][p]=list_of_pockets[k][p]
-    key_to_del=[]
+                new_dict[k][p] = list_of_pockets[k][p]
+    key_to_del = []
     for k in new_dict.keys():
         if not new_dict[k]:
             key_to_del.append(k)
     for k in key_to_del:
         new_dict.pop(k)
     return new_dict
+
 
 def show_pockets(pocket_dict):
     """get a pocket_dict from the get_pockets() function"""
@@ -259,8 +277,8 @@ class Pockets:
             self.chain_coverage = {}
             self.part_of_domain = []
         if float(self.param['druggability_score']) >= 0.5 and (
-            float(self.param['apolar_sasa']) / float(self.param['total_sasa'])) > 0.5 and float(
-                self.param['volume']) >= 250.0 and float(self.param['total_sasa']) >= 50.0:
+                float(self.param['apolar_sasa']) / float(self.param['total_sasa'])) > 0.5 and float(
+            self.param['volume']) >= 250.0 and float(self.param['total_sasa']) >= 50.0:
             self.druggable = 'TRUE'
 
     def show(self):
@@ -312,8 +330,13 @@ class Pockets:
                 if k in pdb_info['Chain']:
                     count += len(self.chain_coverage[k])
             try:
-                self.part_of_domain.append(
-                    {'domain': 'other', 'coverage': round((count / pdb_info['length']) * 100, 0), 'domain_id': 'other'})
+                if pdb_info['length'] == 0:
+                    self.part_of_domain.append(
+                        {'domain': 'other', 'coverage': '', 'domain_id': 'other'})
+                else:
+                    self.part_of_domain.append(
+                        {'domain': 'other', 'coverage': round((count / pdb_info['length']) * 100, 0),
+                         'domain_id': 'other'})
             except KeyError:
                 self.part_of_domain.append(
                     {'domain': 'other', 'coverage': '', 'domain_id': 'other'})
