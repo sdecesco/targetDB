@@ -5,7 +5,7 @@ import subprocess
 import shutil
 import argparse
 from operator import itemgetter
-from druggability3.utils import pdb_parser as parser
+from targetDB.utils import pdb_parser as parser
 from Bio.PDB import *
 
 Bioparser = PDBParser(PERMISSIVE=1, QUIET=True)
@@ -344,7 +344,7 @@ class Pockets:
 
 if __name__ == "__main__":
     sys.path.append('/ssddata/sdecesco/data/Scripts/Druggability_3')
-    from druggability3 import druggability_assesment as drug
+    from targetDB import druggability_assesment as drug
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', '--output', type=str, help='output folder name', metavar='')

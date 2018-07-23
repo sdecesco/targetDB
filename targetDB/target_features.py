@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import re, sqlite3, math
 import pandas as pd
-from druggability3 import cns_mpo as mpo
+from targetDB import cns_mpo as mpo
 import numpy as np
 import scipy.stats as sc
 

@@ -9,7 +9,7 @@ setuptools.setup(
     description="Package with an application to generate report on potential drug targets",
     long_description="Package with an application to generate report on potential drug targets (TO BE COMPLETED)",
     long_description_content_type="text/markdown",
-    url="https://github.com/sdecesco/druggability",
+    url="https://github.com/sdecesco/targetDB",
     packages=setuptools.find_packages(),
     classifiers=(
         "Programming Language :: Python :: 3","Development Status :: 4", "Intended Audience :: Science/Research"  

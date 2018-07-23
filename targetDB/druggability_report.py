@@ -5,9 +5,9 @@ import argparse, sys, os, sqlite3, re, requests, time, configparser
 from tkinter.filedialog import askopenfilename,askdirectory
 from tkinter.simpledialog import askstring
 from Bio import Entrez, Medline
-from druggability3 import target_descriptors as td
-from druggability3 import target_features as tf
-from druggability3 import cns_mpo as mpo
+from targetDB import target_descriptors as td
+from targetDB import target_features as tf
+from targetDB import cns_mpo as mpo
 import pandas as pd
 
 
