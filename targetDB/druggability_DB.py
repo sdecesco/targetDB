@@ -19,19 +19,19 @@ from Bio import ExPASy, Entrez, Medline
 from Bio import SwissProt
 from intermine.webservice import Service
 from intermine.errors import ServiceError, WebserviceError
-from druggability3 import pocket_finder as pocket
-from druggability3.utils import db_connection as db, pdb_parser
-from druggability3.protein_atlas_api import proteinatlas as patlas
+from targetDB import pocket_finder as pocket
+from targetDB.utils import db_connection as db, pdb_parser
+from targetDB.protein_atlas_api import proteinatlas as patlas
 from Bio.Seq import Seq
 from Bio import pairwise2
 from Bio.SubsMat.MatrixInfo import blosum62
 from Bio.Blast import NCBIXML
 import pandas as pd
 from sqlalchemy import create_engine
-from druggability3 import cns_mpo as mpo
-from druggability3 import drugg_errors
-from druggability3 import target_descriptors as td
-from druggability3 import target_features as tf
+from targetDB import cns_mpo as mpo
+from targetDB import drugg_errors
+from targetDB import target_descriptors as td
+from targetDB import target_features as tf
 import pkg_resources as pkg
 
 # ===================# SETTING UP PATHS #============================#

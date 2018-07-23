@@ -12,9 +12,9 @@ setuptools.setup(
     url="https://github.com/sdecesco/druggability",
     packages=setuptools.find_packages(),
     classifiers=(
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: GPL3.0 License",
-        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3","Development Status :: 4", "Intended Audience :: Science/Research"  
+        "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+        "Operating System :: OS Independent","Programming Language :: Python :: 3 :: Only"
     ),
 	install_requires=[
 		'biopython','scipy','matplotlib','pandas']
