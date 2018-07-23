@@ -43,9 +43,10 @@ tcrd database can only be downloaded as a MySQL dump [HERE](http://juniper.healt
 
 to convert it into a sqlite database please follow the [instructions](https://github.com/webyrd/mediKanren/tree/master/pharos)
 
->#####Note
+>Note
 >
 >dependencies on the TCRD database will be removed in future updates
 
 Usage
 -----
+examples will be posted soon
