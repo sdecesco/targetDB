@@ -29,7 +29,7 @@ This script can be used in two modes :
 + Database Creation
 >See later sections for more details
 
-#####Report only
+##### Report only
 
 The only required databases is :
 + targetDB
@@ -46,14 +46,14 @@ ChEMBL sqlite database can be directly downloaded [HERE](ftp://ftp.ebi.ac.uk/pub
 
 >This mode will generate a targetDB database that can then be used in report mode
 
-####Other dependencies for the database creation mode
+####O ther dependencies for the database creation mode
 
-#####blast
+##### blast
 This mode use blast locally to perform similarity search and sequence alignments 
 
 information to download and install blast locally can be found [HERE](https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Web&PAGE_TYPE=BlastDocs&DOC_TYPE=Download)
 
-#####fpocket
+##### fpocket
 In order to perform binding pocket searches and assess their druggability the program fpocket is used 
 
 >Vincent Le Guilloux, Peter Schmidtke and Pierre Tuffery, "Fpocket: An open source platform for ligand pocket detection", BMC Bioinformatics, 2009, 10:168
@@ -78,7 +78,7 @@ Usage
 -----
 targetDB package provides two command-line tools `target_DB` and `target_REPORT`
 
-###`target_DB`
+### `target_DB`
 
 `target_DB` is the command used to generate/fill a targetDB database that can then be used in the report mode. If you don't want to use this mode you can download a pre-filled database and use it to generate reports
 >Pre-filled databases will be generated when major updates of datasources are available
@@ -112,7 +112,7 @@ Those informations will be stored in ~/.druggability/config.ini
 
 If you want to modify the informations in that file just use the `-update_config` flag
 
-#####example 
+##### example 
 input:
 ```
 target_DB -g DYRK1A -v
@@ -166,7 +166,7 @@ output:
 ```
 
 
-###`target_REPORT`
+### `target_REPORT`
 
 `target_REPORT` is the command-line used to generate reports on one or many targets here are the available flags:
 
@@ -195,7 +195,7 @@ Those informations will be stored in ~/.druggability/config.ini
 
 If you want to modify the informations in that file just use the `-update_config` flag
 
-#####example 
+##### example 
 input:
 ```
 target_REPORT -g DYRK1A -rs -v
