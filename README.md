@@ -46,7 +46,7 @@ ChEMBL sqlite database can be directly downloaded [HERE](ftp://ftp.ebi.ac.uk/pub
 
 >This mode will generate a targetDB database that can then be used in report mode
 
-####O ther dependencies for the database creation mode
+#### Other dependencies for the database creation mode
 
 ##### blast
 This mode use blast locally to perform similarity search and sequence alignments 
