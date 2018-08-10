@@ -27,7 +27,7 @@ def gene_to_id(list_of_genes,targetDB_path=None):
 			for g_id in gene_id:
 				gene_name = gene_xref.xref_value.loc[gene_xref[(gene_xref.hgnc_id == g_id) & (gene_xref.xref_name == 'symbol')].first_valid_index()]
 				gene_uniprot = gene_xref[(gene_xref.hgnc_id == g_id) & (gene_xref.xref_name == 'uniprot_ids')].xref_value.values
-				gene_ensembl = gene_xref.at[gene_xref[(gene_xref.hgnc_id == g_id) &(gene_xref.xref_name=='ensembl_gene_id')].first_valid_index(),'xref_value']
+				gene_ensembl = gene_xref.loc[gene_xref[(gene_xref.hgnc_id == g_id) &(gene_xref.xref_name=='ensembl_gene_id')].first_valid_index(),'xref_value']
 				if gene_uniprot.size > 1:
 					count = 0
 					for uniprot_id in gene_uniprot:
@@ -41,7 +41,7 @@ def gene_to_id(list_of_genes,targetDB_path=None):
 		else:
 			gene_name = gene_xref.xref_value.loc[gene_xref[(gene_xref.hgnc_id == gene_id.loc[gene_id.first_valid_index()]) & (gene_xref.xref_name == 'symbol')].first_valid_index()]
 			gene_uniprot = gene_xref[(gene_xref.hgnc_id == gene_id.loc[gene_id.first_valid_index()]) & (gene_xref.xref_name == 'uniprot_ids')].xref_value
-			gene_ensembl = gene_xref.at[gene_xref[(gene_xref.hgnc_id == gene_id.loc[gene_id.first_valid_index()]) & (gene_xref.xref_name == 'ensembl_gene_id')].first_valid_index(), 'xref_value']
+			gene_ensembl = gene_xref.loc[gene_xref[(gene_xref.hgnc_id == gene_id.loc[gene_id.first_valid_index()]) & (gene_xref.xref_name == 'ensembl_gene_id')].first_valid_index(), 'xref_value']
 			if gene_uniprot.size > 1:
 				count = 0
 				for uniprot_id in gene_uniprot:
