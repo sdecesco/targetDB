@@ -29,11 +29,10 @@ class StdevFunc:
 		return math.sqrt(self.S / (self.k - 2))
 
 
-def get_descriptors(target_id, targetdb=None, tcrdDB=None):
+def get_descriptors(target_id, targetdb=None):
 	connector_targetDB = sqlite3.connect(targetdb)
 	connector_targetDB.create_aggregate('stddev', 1, StdevFunc)
-	connector_tcrdDB = sqlite3.connect(tcrdDB)
-	connector_tcrdDB.create_aggregate('stddev', 1, StdevFunc)
+
 	list_queries = {'gen_info': """SELECT * FROM Targets WHERE Target_id='%s'""" % target_id,
 					'disease': """SELECT Target_id,disease_name,disease_id FROM disease WHERE Target_id='%s'""" % target_id,
 					'reactome': """SELECT pathway_name FROM pathways WHERE pathway_dataset='Reactome pathways data set' AND Target_id='%s'""" % target_id,
@@ -246,7 +245,6 @@ def get_descriptors(target_id, targetdb=None, tcrdDB=None):
 	  L.molecularWeight as MW,
 	  L.rotatableBonds as rotB,
 	  L.n_Ar_rings as nAr,
-	  L.n_alerts as n_alerts,
 	  L.molecular_species,
 	  L.num_ro5_violations as ro5_violations,
 	  L.ro3_pass as pass_ro3,
@@ -269,7 +267,7 @@ def get_descriptors(target_id, targetdb=None, tcrdDB=None):
 					'commercials': """SELECT
 	smiles,
 	affinity_type,
-	' =' as op,
+	op,
 	affinity_value,
 	affinity_unit,
 	price,
@@ -307,7 +305,6 @@ def get_descriptors(target_id, targetdb=None, tcrdDB=None):
 	  L.molecularWeight as MW,
 	  L.rotatableBonds as rotB,
 	  L.n_Ar_rings as nAr,
-	  L.n_alerts as n_alerts,
 	  L.molecular_species,
 	  L.num_ro5_violations as ro5_violations,
 	  L.ro3_pass as pass_ro3,
@@ -500,68 +497,30 @@ def get_descriptors(target_id, targetdb=None, tcrdDB=None):
 	data['commercials_total'] = len(results['commercials'])
 	data['commercials_potent_total'] = len(results['commercials'][results['commercials']['affinity_value'] <= 100])
 
-	connector_targetDB.close()
 
-	query_id = """SELECT id FROM protein WHERE uniprot= '%s'""" % target_id
-	tcrd_id = pd.read_sql(query_id, con=connector_tcrdDB)
+	query_id = """SELECT tcrd_id FROM tcrd_id WHERE Target_id= '%s'""" % target_id
+	tcrd_id = pd.read_sql(query_id, con=connector_targetDB)
 	if tcrd_id.empty:
 		tcrd_id = 'None'
 	else:
-		tcrd_id = tcrd_id.iloc[0]['id']
+		tcrd_id = tcrd_id.iloc[0]['tcrd_id']
 
-	tcrd_queries = {'target': """SELECT * FROM target WHERE id = '%s' """ % tcrd_id,
-					'tdl_info': """SELECT * FROM tdl_info WHERE protein_id = '%s'""" % tcrd_id,
-					'patent': """SELECT * FROM patent_count where protein_id = '%s'""" % tcrd_id,
-					'expression': """SELECT * FROM expression where etype='Consensus' and protein_id = '%s'""" % tcrd_id,
-					'screening': """SELECT * FROM mlp_assay_info WHERE protein_id = '%s'""" % tcrd_id,
-					'pmscore': """SELECT * FROM pmscore WHERE protein_id = '%s'""" % tcrd_id,
-					'disease': """SELECT TI.protein_id,TI.disease_id,T.doid,TI.score,T.name,DP.parent
+	tcrd_queries = {'target': """SELECT * FROM tcrd_target WHERE tcrd_id = '%s' """ % tcrd_id,
+					'tdl_info': """SELECT * FROM tcrd_info WHERE protein_id = '%s'""" % tcrd_id,
+					'disease': """SELECT protein_id,disease_id,doid,score,name,parent
 	FROM
-	tinx_importance TI
-	LEFT JOIN tinx_disease T ON TI.disease_id = T.id
-	LEFT JOIN do_parent DP on T.doid = DP.doid
-	WHERE TI.protein_id='%s'
-	ORDER BY TI.score DESC""" % tcrd_id,
-					'novelty': """SELECT score FROM tinx_novelty WHERE protein_id = '%s'""" % tcrd_id}
-	tcrd_res = {qname: pd.read_sql(query, con=connector_tcrdDB) for qname, query in tcrd_queries.items()}
+	tcrd_disease
+	WHERE protein_id='%s'
+	ORDER BY score DESC""" % tcrd_id,
+					'novelty': """SELECT score FROM tcrd_novelty WHERE protein_id = '%s'""" % tcrd_id}
+	tcrd_res = {qname: pd.read_sql(query, con=connector_targetDB) for qname, query in tcrd_queries.items()}
 
-	tcrd_data = tcrd_res['target'].drop(['name', 'ttype', 'description', 'comment', 'idg2', 'famext'], axis=1)
+	tcrd_data = tcrd_res['target']
 	tcrd_data['Target_id'] = target_id
-	tcrd_data.set_index('id', inplace=True)
+	tcrd_data.set_index('tcrd_id', inplace=True)
 
-	info = tcrd_res['tdl_info'].copy()
-	col_to_keep = ['Ab Count', 'MAb Count', 'NCBI Gene PubMed Count', 'EBI Total Patent Count', 'PubTator Score',
-				   'JensenLab PubMed Score']
-	info = info[info['itype'].isin(col_to_keep)]
-	info['value'] = info['number_value'].fillna(0) + info['integer_value'].fillna(0)
-	info = info.pivot(index='protein_id', columns='itype', values='value')
-	for col in col_to_keep:
-		if col not in info.columns:
-			info[col] = 0
-	tcrd_data = tcrd_data.join(info)
-
-	tcrd_res['patent'].index = tcrd_res['patent']['year']
-	tcrd_res['patent']['cumul_sum'] = tcrd_res['patent']['count'].cumsum()
-	tcrd_data['patent_trend_UP'] = tcrd_res['patent']['cumul_sum'].pct_change(3)[-10:].sum() > 1
-
-	pm_score = tcrd_res['pmscore'].copy()
-	pm_score.index = pm_score['year']
-	pm_score['cumul_sum'] = pm_score['score'].cumsum()
-	tcrd_data['pubmed_trend_UP'] = pm_score['cumul_sum'].pct_change(3)[-10:].sum() > 1
-
-	# expression = tcrd_res['expression'][['protein_id', 'tissue', 'qual_value']]
-	# expression = expression.pivot(index='protein_id', columns='tissue', values='qual_value')
-	# expression = expression.add_prefix('Consensus_')
-	# tcrd_data = tcrd_data.join(expression)
-
-	tcrd_data['screens_count'] = len(tcrd_res['screening'])
-	if len(tcrd_res['screening']) != 0:
-		tcrd_data['screens_compounds_total'] = tcrd_res['screening']['total_sids'].sum()
-		tcrd_data['screens_active_ratio'] = tcrd_res['screening']['active_sids'].sum() / tcrd_res['screening'][
-			'total_sids'].sum()
-	else:
-		tcrd_data['screens_compounds_total'] = 0
-		tcrd_data['screens_active_ratio'] = 0
+	tcrd_res['tdl_info'].index = tcrd_res['tdl_info'].protein_id
+	tcrd_data = tcrd_data.join(tcrd_res['tdl_info'])
 
 	tcrd_data['tcrd_disease_count'] = len(tcrd_res['disease'][(~tcrd_res['disease']['doid'].isin(
 		tcrd_res['disease']['parent'].unique())) & (tcrd_res['disease']['score'] > 1)])
@@ -572,15 +531,13 @@ def get_descriptors(target_id, targetdb=None, tcrdDB=None):
 		tcrd_data['tcrd_novelty_score'] = np.nan
 
 	data = pd.merge(data, tcrd_data, on='Target_id')
-	connector_tcrdDB.close()
+	connector_targetDB.close()
 	return data
 
 
-def get_descriptors_list(target_id, targetdb=None, tcrdDB=None):
+def get_descriptors_list(target_id, targetdb=None):
 	connector_targetDB = sqlite3.connect(targetdb)
 	connector_targetDB.create_aggregate('stddev', 1, StdevFunc)
-	connector_tcrdDB = sqlite3.connect(tcrdDB)
-	connector_tcrdDB.create_aggregate('stddev', 1, StdevFunc)
 	list_queries = {'gen_info': """SELECT * FROM Targets WHERE Target_id in ('%s')""" % target_id,
 					'disease': """SELECT Target_id,disease_name,disease_id FROM disease WHERE Target_id in ('%s')""" % target_id,
 					'reactome': """SELECT pathway_name,Target_id FROM pathways WHERE pathway_dataset='Reactome pathways data set' AND Target_id in ('%s')""" % target_id,
@@ -766,7 +723,6 @@ def get_descriptors_list(target_id, targetdb=None, tcrdDB=None):
 	  L.molecularWeight as MW,
 	  L.rotatableBonds as rotB,
 	  L.n_Ar_rings as nAr,
-	  L.n_alerts as n_alerts,
 	  L.molecular_species,
 	  L.num_ro5_violations as ro5_violations,
 	  L.ro3_pass as pass_ro3,
@@ -827,7 +783,6 @@ def get_descriptors_list(target_id, targetdb=None, tcrdDB=None):
 	  L.molecularWeight as MW,
 	  L.rotatableBonds as rotB,
 	  L.n_Ar_rings as nAr,
-	  L.n_alerts as n_alerts,
 	  L.molecular_species,
 	  L.num_ro5_violations as ro5_violations,
 	  L.ro3_pass as pass_ro3,
@@ -869,20 +824,20 @@ def get_descriptors_list(target_id, targetdb=None, tcrdDB=None):
 	data = data.merge(results['disease'].groupby('Target_id')['disease_id'].count().reset_index().rename(
 		columns={'disease_id': 'disease_count_uniprot'}), on='Target_id', how='left')
 	if not results['pockets'].empty:
-		data = data.merge(results['pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index(), on='Target_id',
+		data = data.merge(results['pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index().round(2), on='Target_id',
 						  how='left')
 		data = data.merge(results['pockets'].groupby('Target_id')['druggability_score'].std().reset_index().rename(
-			columns={'druggability_score': 'stddev_druggability_score'}), on='Target_id', how='left')
+			columns={'druggability_score': 'stddev_druggability_score'}).round(2), on='Target_id', how='left')
 	data = data.merge(results['pockets'].groupby('Target_id')['PDB_code'].nunique().reset_index().rename(
 		columns={'PDB_code': 'pdb_with_druggable_pocket'}), on='Target_id', how='left')
 	data = data.merge(results['pockets'].groupby('Target_id')['PDB_code'].count().reset_index().rename(
 		columns={'PDB_code': 'druggable_pockets_total'}), on='Target_id', how='left')
 	if not results['alt_pockets'].empty:
-		data = data.merge(results['alt_pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index(),
+		data = data.merge(results['alt_pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index().round(2),
 						  on='Target_id',
 						  how='left')
 		data = data.merge(results['alt_pockets'].groupby('Target_id')['alt_druggability_score'].std().reset_index().rename(
-			columns={'alt_druggability_score': 'alt_stddev_druggability_score'}), on='Target_id', how='left')
+			columns={'alt_druggability_score': 'alt_stddev_druggability_score'}).round(2), on='Target_id', how='left')
 	data = data.merge(results['alt_pockets'].groupby('Target_id')['alt_similarity'].max().reset_index().rename(
 		columns={'alt_similarity': 'max_alt_similarity'}), on='Target_id', how='left')
 
@@ -901,15 +856,20 @@ def get_descriptors_list(target_id, targetdb=None, tcrdDB=None):
 	data = data.merge(potent_max_phase.groupby('target_id')['ligand_name'].count().reset_index().rename(
 		columns={'target_id': 'Target_id', 'ligand_name': 'BindingDB_potent_phase2_count'}), on='Target_id', how='left')
 
-	tissue_grouped = results['tissue_expression'].groupby(['Target_id', 'tissue']).max().groupby(
-		['Target_id', 'organ']).mean().round(1).reset_index()
-	tissue = tissue_grouped.pivot(index='Target_id', columns='organ', values='value').reset_index()
+	if not results['tissue_expression'].empty:
+		tissue_grouped = results['tissue_expression'].groupby(['Target_id', 'tissue']).max().groupby(
+			['Target_id', 'organ']).mean().round(1).reset_index()
+		tissue = tissue_grouped.pivot(index='Target_id', columns='organ', values='value').reset_index()
+		tissue_max = tissue_grouped.loc[tissue_grouped.groupby('Target_id').idxmax()['value']].rename(
+				columns={'organ': 'tissue_max_expression', 'value': 'expression_max_tissue'})
+	else:
+		tissue = pd.DataFrame(columns=['Target_id','Brain','Endocrine_tissue','Female_tissue','Immune','Kidney','Liver_gallbladder','Lung','Male_tissue','Muscle_tissue','Pancreas','Skin','Soft_tissue','gitract'])
+		tissue_max = pd.DataFrame(columns=['tissue_max_expression','expression_max_tissue','Target_id'])
 
 	data = data.merge(tissue, on='Target_id', how='left')
 	data = data.merge(results['selectivity'].round(2).rename(columns={'Selectivity_entropy': 'Expression_Selectivity'}),
 					  on='Target_id', how='left')
-	data = data.merge(tissue_grouped.loc[tissue_grouped.groupby('Target_id').idxmax()['value']].rename(
-		columns={'organ': 'tissue_max_expression', 'value': 'expression_max_tissue'}), on='Target_id', how='left')
+	data = data.merge(tissue_max, on='Target_id', how='left')
 
 	data = data.merge(
 		results['var'].groupby('Target_id')['start'].count().reset_index().rename(columns={'start': 'variants_count'}),
@@ -1056,67 +1016,58 @@ def get_descriptors_list(target_id, targetdb=None, tcrdDB=None):
 		'smiles'].count().reset_index().rename(
 		columns={'smiles': 'commercial_potent_total', 'target_id': 'Target_id'}), on='Target_id', how='left')
 
-	connector_targetDB.close()
 
-	query_id = """SELECT id,uniprot as Target_id FROM protein WHERE uniprot in ('%s')""" % target_id
-	tcrd_id = pd.read_sql(query_id, con=connector_tcrdDB)
-	tcrd_id_list = "','".join([str(i) for i in tcrd_id['id'].values.tolist()])
+	query_id = """SELECT * FROM tcrd_id WHERE Target_id in ('%s')""" % target_id
+	tcrd_id = pd.read_sql(query_id, con=connector_targetDB)
+	tcrd_id_list = "','".join([str(i) for i in tcrd_id['tcrd_id'].values.tolist()])
 
 
-	tcrd_queries = {'target': """SELECT * FROM target WHERE id in ('%s') """ % tcrd_id_list,
-				'tdl_info': """SELECT * FROM tdl_info WHERE protein_id in ('%s')""" % tcrd_id_list,
-				'patent': """SELECT * FROM patent_count where protein_id in ('%s')""" % tcrd_id_list,
-				'disease': """SELECT TI.protein_id,TI.disease_id,T.doid,TI.score,T.name,DP.parent
-	FROM
-	tinx_importance TI
-	LEFT JOIN tinx_disease T ON TI.disease_id = T.id
-	LEFT JOIN do_parent DP on T.doid = DP.doid
-	WHERE TI.protein_id in ('%s')
-	ORDER BY TI.score DESC""" % tcrd_id_list,
-				'novelty': """SELECT score,protein_id as id FROM tinx_novelty WHERE protein_id in ('%s')""" % tcrd_id_list}
-	tcrd_res = {qname: pd.read_sql(query, con=connector_tcrdDB) for qname, query in tcrd_queries.items()}
+	tcrd_queries = {'target': """SELECT * FROM tcrd_target WHERE tcrd_id in ('%s') """ % tcrd_id_list,
+				'tdl_info': """SELECT * FROM tcrd_info WHERE protein_id in ('%s')""" % tcrd_id_list,
+				'patent': """SELECT * FROM tcrd_patent where protein_id in ('%s')""" % tcrd_id_list,
+				'disease': """SELECT protein_id,disease_id,doid,score,name,parent
+					FROM
+					tcrd_disease
+	WHERE protein_id in ('%s')
+	ORDER BY score DESC""" % tcrd_id_list,
+				'novelty': """SELECT score,protein_id as tcrd_id FROM tcrd_novelty WHERE protein_id in ('%s')""" % tcrd_id_list}
+	tcrd_res = {qname: pd.read_sql(query, con=connector_targetDB) for qname, query in tcrd_queries.items()}
 
 	tcrd_data = tcrd_id.copy()
 
-	tcrd_data = tcrd_data.merge(tcrd_res['target'].drop(['name', 'ttype', 'description', 'comment', 'idg2'], axis=1).rename(
-		columns={'tdl': 'Pharos_class', 'fam': 'protein_family', 'famext': 'protein_family_detail'}), on='id', how='left')
+	tcrd_data = tcrd_data.merge(tcrd_res['target'], on='tcrd_id', how='left')
 
-	info = tcrd_res['tdl_info'].copy()
-	col_to_keep = ['Ab Count', 'MAb Count', 'NCBI Gene PubMed Count', 'EBI Total Patent Count', 'PubTator Score',
-				   'JensenLab PubMed Score']
-	info = info[info['itype'].isin(col_to_keep)]
-	info['value'] = info['number_value'].fillna(0) + info['integer_value'].fillna(0)
-	info = info.pivot(index='protein_id', columns='itype', values='value')
-	info = info.reset_index().rename(columns={'protein_id': 'id'}).round(2)
+	tcrd_res['tdl_info'].rename(columns={'protein_id': 'tcrd_id'},inplace=True)
+	tcrd_res['tdl_info'] = tcrd_res['tdl_info'].round(2)
 
-	tcrd_data = tcrd_data.merge(info, on='id', how='left')
+	tcrd_data = tcrd_data.merge(tcrd_res['tdl_info'], on='tcrd_id', how='left')
 
 	tcrd_data = tcrd_data.merge(tcrd_res['patent'].groupby('protein_id')['count'].sum().reset_index().rename(
-		columns={'count': 'total_patent_count', 'protein_id': 'id'}), on='id', how='left')
+		columns={'count': 'total_patent_count', 'protein_id': 'tcrd_id'}), on='tcrd_id', how='left')
 	tcrd_data = tcrd_data.merge(
-		tcrd_res['patent'].iloc[tcrd_res['patent'].groupby('protein_id')['count'].idxmax()].drop(['id'], axis=1).rename(
-			columns={'protein_id': 'id', 'year': 'year_max_patents', 'count': 'count_patents_max_year'}), on='id',
+		tcrd_res['patent'].iloc[tcrd_res['patent'].groupby('protein_id')['count'].idxmax()].rename(
+			columns={'protein_id': 'tcrd_id', 'year': 'year_max_patents', 'count': 'count_patents_max_year'}), on='tcrd_id',
 		how='left')
 
 	disease_clean = tcrd_res['disease'][
 		(tcrd_res['disease']['score'] > 1) & (~tcrd_res['disease']['doid'].isin(tcrd_res['disease']['parent'].unique()))]
 	disease_list = disease_clean.groupby('protein_id')['name'].unique().apply('\n'.join).reset_index().rename(
-		columns={'protein_id': 'id', 'name': 'disease_list_tcrd'})
+		columns={'protein_id': 'tcrd_id', 'name': 'disease_list_tcrd'})
 	disease_count = disease_clean.groupby('protein_id')['name'].nunique().reset_index().rename(
-		columns={'protein_id': 'id', 'name': 'disease_count_tcrd'})
+		columns={'protein_id': 'tcrd_id', 'name': 'disease_count_tcrd'})
 	disease_max = disease_clean.loc[disease_clean.groupby('protein_id')['score'].idxmax().values].drop(
 		['parent', 'doid', 'disease_id'], axis=1).rename(
-		columns={'protein_id': 'id', 'score': 'max_disease_score', 'name': 'name_max_disease'}).round(2)
+		columns={'protein_id': 'tcrd_id', 'score': 'max_disease_score', 'name': 'name_max_disease'}).round(2)
 
-	tcrd_data = tcrd_data.merge(disease_list, on='id', how='left')
-	tcrd_data = tcrd_data.merge(disease_count, on='id', how='left')
-	tcrd_data = tcrd_data.merge(disease_max, on='id', how='left')
+	tcrd_data = tcrd_data.merge(disease_list, on='tcrd_id', how='left')
+	tcrd_data = tcrd_data.merge(disease_count, on='tcrd_id', how='left')
+	tcrd_data = tcrd_data.merge(disease_max, on='tcrd_id', how='left')
 
-	tcrd_data = tcrd_data.merge(tcrd_res['novelty'].rename(columns={'score': 'novelty_score'}), on='id', how='left')
-	tcrd_data = tcrd_data.drop(['id'], axis=1)
+	tcrd_data = tcrd_data.merge(tcrd_res['novelty'].rename(columns={'score': 'novelty_score'}), on='tcrd_id', how='left')
+	tcrd_data = tcrd_data.drop(['tcrd_id'], axis=1)
 
 	data = data.merge(tcrd_data, on='Target_id',how='left')
-	connector_tcrdDB.close()
+	connector_targetDB.close()
 	return data
 
 
@@ -1145,11 +1096,11 @@ def make_spider_plot(data, labels, target_name=''):
 	counter = 0
 	for bar in bars:
 		counter += 1
-		if counter <= 4:
+		if counter <= 3:
 			bar.set_facecolor('mediumorchid')
-		elif counter <= 8:
+		elif counter <= 7:
 			bar.set_facecolor('cornflowerblue')
-		elif counter <= 12:
+		elif counter <= 11:
 			bar.set_facecolor('forestgreen')
 		else:
 			bar.set_facecolor('powderblue')
@@ -1163,14 +1114,12 @@ def make_spider_plot(data, labels, target_name=''):
 def make_score(df):
 	col_to_keep = ['Ab Count', 'MAb Count', 'tcrd_disease_count', 'disease_count',
 				   'gwas_count', 'variants_count', 'mutant_count', 'isoforms_count', 'domains_count',
-				   # 'grants_amount_total', 'grants_total_count',
 				   'ChEMBL_bioactives_count', 'ChEMBL_bioactives_good_selectivity_count',
 				   'ChEMBL_bioactives_great_selectivity_count',
 				   'ChEMBL_bioactives_moderate_selectivity_count',
 				   'ChEMBL_bioactives_potent_count', 'bindingDB_count',
 				   'bindingDB_potent_count', 'commercials_potent_total',
-				   'commercials_total', 'screens_active_ratio', 'screens_compounds_total',
-				   'screens_count',
+				   'commercials_total',
 				   'JensenLab PubMed Score', 'NCBI Gene PubMed Count', 'PubTator Score',
 				   'PDB_blast_close_count',
 				   'PDB_sites_druggable', 'PDB_sites_tractable', 'PDB_total_count',
@@ -1193,7 +1142,7 @@ def make_score(df):
 	spider_score['ChEMBL'] = cap_score(spider_score['ChEMBL'], 10)
 	spider_score['BindingDB'] = cap_score(dfsqrt['bindingDB_potent_count'], 7)
 	spider_score['Commercial'] = cap_score(df2['commercials_potent_total'], 10)
-	spider_score['Screening'] = cap_score(dflog2['screens_compounds_total'], 7)
+	# spider_score['Screening'] = cap_score(dflog2['screens_compounds_total'], 7)
 	spider_score['PDB_total'] = cap_score(dflog2['PDB_total_count'], 5)
 	spider_score['PDB_with_Lig'] = (df2['PDB_with_Ligand_count'] / df2['PDB_total_count']) * 10
 	spider_score['PDB_druggable'] = cap_score(

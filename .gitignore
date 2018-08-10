@@ -3,7 +3,7 @@
 
 druggability3/data/
 
-
+*.pyc
 
 build/
 

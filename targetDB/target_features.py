@@ -251,7 +251,6 @@ def get_single_features(target_id, dbase=None):
               L.molecularWeight as MW,
               L.rotatableBonds as rotB,
               L.n_Ar_rings as nAr,
-              L.n_alerts as n_alerts,
               L.molecular_species,
               L.num_ro5_violations as ro5_violations,
               L.ro3_pass as pass_ro3,
@@ -312,7 +311,6 @@ def get_single_features(target_id, dbase=None):
               L.molecularWeight as MW,
               L.rotatableBonds as rotB,
               L.n_Ar_rings as nAr,
-              L.n_alerts as n_alerts,
               L.molecular_species,
               L.num_ro5_violations as ro5_violations,
               L.ro3_pass as pass_ro3,
@@ -331,7 +329,8 @@ def get_single_features(target_id, dbase=None):
     WHERE pdb_code in (SELECT DISTINCT LOWER(PDB_code)
       FROM PDB_Chains
     WHERE target_id = '%s')
-    GROUP BY domain_fold""" % target_id}
+    GROUP BY domain_fold""" % target_id,
+                      'open_target':"""SELECT * FROM opentarget_association WHERE target_id='%s'""" % target_id}
 	connector = sqlite3.connect(dbase)
 	connector.create_aggregate('stddev', 1, StdevFunc)
 	results = {qname: pd.read_sql(query, con=connector) for qname, query in single_queries.items()}
@@ -356,7 +355,7 @@ def transform_bioactivities(results, dbase):
 	       'activity_comment', 'data_validity_comment', 'bioactivity_type', 'assay_species',
 	       'assay_description',
 	       'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD', 'LogD', 'LogP', 'MW', 'TPSA', 'aLogP',
-	       'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3', 'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name',
+	       'apKa', 'bpKa', 'nAr', 'pass_ro3', 'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name',
 	       'molecular_species', 'indication_class', 'class_def', 'max_phase', 'oral', 'assay_ref', 'ref_bio',
 	       'target_id']
 
@@ -468,7 +467,7 @@ def transform_bioactivities(results, dbase):
 			             'best_target_name', 'activity_comment', 'bioactivity_type', 'assay_species',
 			             'assay_description',
 			             'confidence_score', 'assay_id', 'SMILES', 'HBA', 'HBD', 'LogD', 'LogP', 'MW',
-			             'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3',
+			             'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'pass_ro3',
 			             'ro5_violations', 'rotB', 'CNS_MPO', 'mol_name', 'molecular_species',
 			             'indication_class', 'class_def', 'max_phase', 'oral', 'assay_ref',
 			             'ref_bio']

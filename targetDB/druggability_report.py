@@ -1,226 +1,33 @@
 #!/usr/bin/env python
 
-import urllib.request as urllib
-import argparse, sys, os, sqlite3, re, requests, time, configparser
-from tkinter.filedialog import askopenfilename,askdirectory
-from tkinter.simpledialog import askstring
+import argparse
+import configparser
+import re
+import sqlite3
+import sys
+import time
+from pathlib import Path
+
+import pandas as pd
 from Bio import Entrez, Medline
+
+from targetDB import cns_mpo as mpo
 from targetDB import target_descriptors as td
 from targetDB import target_features as tf
-from targetDB import cns_mpo as mpo
-import pandas as pd
-
-
-def get_config_from_user(config, todo=['chembl', 'targetdb', 'tcrd', 'single', 'list', 'email']):
-	print('========================================================')
-	print('=================== CONFIGURATION ======================')
-	print('========================================================')
-
-	if 'chembl' in todo:
-		path_exist = False
-		while path_exist == False:
-			print('========================================================')
-			print('================ CHEMBL SQLITE FILE ====================')
-			print('=====================(optional)=========================\n')
-			chembldb_path = askopenfilename(title='Select ChEMBL sqlite database', initialdir='/',
-			                           filetypes=[("sqliteDB", "*.db")])
-			if os.path.exists(chembldb_path):
-				path_exist = True
-			else:
-				print('[ERROR]: The file you have entered does not exists \n\n')
-		config['database_path']['chembl'] = chembldb_path
-	if 'targetdb' in todo:
-		path_exist = False
-		while path_exist == False:
-			print('========================================================')
-			print('=============== TargetDB SQLITE FILE ===================')
-			print('========================================================\n')
-			targetDB_path = askopenfilename(title='Select TargetDB sqlite database', initialdir='/',
-						                           filetypes=[("sqliteDB", "*.db")])
-			if os.path.exists(targetDB_path):
-				path_exist = True
-			else:
-				print('[ERROR]: The file you have entered does not exists \n\n')
-		config['database_path']['targetdb'] = targetDB_path
-	if 'tcrd' in todo:
-		path_exist = False
-		while path_exist == False:
-			print('========================================================')
-			print('================= tcrd SQLITE FILE =====================')
-			print('========================================================\n')
-			tcrd_path = askopenfilename(title='Select tcrd (PHAROS) sqlite database', initialdir='/',
-									                           filetypes=[("sqliteDB", "*.db")])
-			if os.path.exists(tcrd_path):
-				path_exist = True
-			else:
-				print('[ERROR]: The file you have entered does not exists \n\n')
-		config['database_path']['tcrd'] = tcrd_path
-	if 'single' in todo:
-		path_exist = False
-		while path_exist == False:
-			print('========================================================')
-			print('=========== SINGLE TARGET OUTPUT FOLDER ================')
-			print('========================================================\n')
-			single_output = askdirectory(title='Select directory to save single output files')
-			if os.path.isdir(single_output):
-				path_exist = True
-			else:
-				print('[ERROR]: The folder you have entered does not exists \n\n')
-		config['output_path']['single'] = single_output
-	if 'list' in todo:
-		path_exist = False
-		while path_exist == False:
-			print('========================================================')
-			print('============= LIST TARGET OUTPUT FOLDER ================')
-			print('========================================================\n')
-			list_output = askdirectory(title='Select directory to save list output files')
-			if os.path.isdir(list_output):
-				path_exist = True
-			else:
-				print('[ERROR]: The folder you have entered does not exists \n\n')
-		config['output_path']['list'] = list_output
-	if 'email' in todo:
-		email_correct = False
-		while email_correct == False:
-			print('========================================================')
-			print('============= EMAIL FOR PUBMED SEARCH ==================')
-			print('========================================================\n')
-			pubmed_email = askstring("Enter your email",'Enter your email address (used for pubmed searches - pubmed api requires an email for batch requests)')
-			if is_email(pubmed_email):
-				email_correct = True
-			else:
-				print('[ERROR]: The email address you have entered is invalid (correct format: youraddress@domain.com) \n')
-
-		config['pubmed_email']['email'] = pubmed_email
-
-	return config
-
-
-def is_email(email):
-	match = re.match('^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$', email)
-	if match is None:
-		return False
-	return True
+from targetDB.utils import config as cf
+from targetDB.utils import retryers as ret
+from targetDB.utils import gene2id as g2id
 
 
 def get_list_entries():
 	connector = sqlite3.connect(targetDB)
-	query = "SELECT Target_id,Gene_name,Synonyms FROM Targets"
-	entries_list = pd.read_sql(query, con=connector)
+	query = "SELECT Target_id,Gene_name FROM Targets"
+	entries_list = pd.read_sql(query, con=connector, index_col='Target_id')
 	connector.close()
 	return entries_list
 
 
-def gene_to_uniprotid_local(list_of_genes):
-	connector = sqlite3.connect(targetDB)
-	gene_list = []
-	for gene in list_of_genes:
-		gene = gene.rstrip('\n')
-		gene = gene.rstrip('\r')
-		gene_list.append(gene)
-	gene_ids = "','".join(gene_list)
-	gene_id_query = """SELECT * FROM hgnc as hgn WHERE hgn.hgnc_id in (SELECT hg.hgnc_id FROM hgnc as hg WHERE hg.xref_value in ('%s'))""" % gene_ids
-	gene_xref = pd.read_sql(gene_id_query, con=connector)
-	connector.close()
-	output = {}
-	for gene in gene_list:
-		gene_id = gene_xref[(gene_xref.xref_value == gene) & (gene_xref.xref_name == 'symbol')]['hgnc_id'].values
-		if gene_id.size == 0:
-			gene_id = gene_xref[(gene_xref.xref_value == gene) & (
-					(gene_xref.xref_name == 'prev_symbol') | (gene_xref.xref_name == 'alias_symbol'))][
-				'hgnc_id'].values
-		if gene_id.size == 0:
-			output[gene] = "No Match"
-			continue
-		elif gene_id.size > 1:
-			for g_id in gene_id:
-				gene_name = \
-					gene_xref[(gene_xref.hgnc_id == g_id) & (gene_xref.xref_name == 'symbol')].xref_value.values[0]
-				gene_uniprot = gene_xref[
-					(gene_xref.hgnc_id == g_id) & (gene_xref.xref_name == 'uniprot_ids')].xref_value.values
-				if gene_uniprot.size > 1:
-					count = 0
-					for uniprot_id in gene_uniprot:
-						name = gene_name + '_' + str(count)
-						output[name] = uniprot_id
-						count += 1
-				elif gene_uniprot.size == 0:
-					output[gene] = "No Match"
-				else:
-					output[gene_name] = gene_uniprot[0]
-		else:
-			gene_name = \
-				gene_xref[(gene_xref.hgnc_id == gene_id[0]) & (gene_xref.xref_name == 'symbol')].xref_value.values[0]
-			gene_uniprot = gene_xref[
-				(gene_xref.hgnc_id == gene_id[0]) & (gene_xref.xref_name == 'uniprot_ids')].xref_value.values
-			if gene_uniprot.size > 1:
-				count = 0
-				for uniprot_id in gene_uniprot:
-					name = gene_name + '_' + str(count)
-					output[name] = uniprot_id
-					count += 1
-			elif gene_uniprot.size == 0:
-				output[gene] = "No Match"
-			else:
-				output[gene_name] = gene_uniprot[0]
-	return output
-
-
-class NetworkError(RuntimeError):
-	pass
-
-
-def retryer(max_retries=10, timeout=5):
-	def wraps(func):
-		request_exceptions = (
-			requests.exceptions.Timeout,
-			requests.exceptions.ConnectionError,
-			requests.exceptions.HTTPError, urllib.URLError, urllib.HTTPError
-		)
-
-		def inner(*args, **kwargs):
-			for i in range(max_retries):
-				try:
-					result = func(*args, **kwargs)
-				except request_exceptions:
-					time.sleep(timeout * i)
-					continue
-				else:
-					return result
-			else:
-				raise NetworkError
-
-		return inner
-
-	return wraps
-
-
-def retryer_pubmed(max_retries=10, timeout=5):
-	def wraps(func):
-		request_exceptions = (
-			requests.exceptions.Timeout,
-			requests.exceptions.ConnectionError,
-			requests.exceptions.HTTPError, urllib.URLError, urllib.HTTPError
-		)
-
-		def inner(*args, **kwargs):
-			for i in range(max_retries):
-				try:
-					result = func(*args, **kwargs)
-				except request_exceptions:
-					time.sleep(timeout * i)
-					continue
-				else:
-					return result
-			else:
-				return pd.DataFrame(data=None)
-
-		return inner
-
-	return wraps
-
-
-@retryer_pubmed(max_retries=10, timeout=5)
+@ret.retryer_pubmed(max_retries=10, timeout=5)
 def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	dict_medline = {"AB": "Abstract", "CI": "Copyright Information", "AD": "Affiliation", "AUID": "Author ID",
 	                "IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
@@ -318,39 +125,6 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	return df
 
 
-@retryer(max_retries=10, timeout=10)
-def open_target_association(gene_id):
-	from opentargets import OpenTargetsClient
-	ot = OpenTargetsClient()
-	associations = ot.get_associations_for_target(gene_id)
-
-	df = associations.to_dataframe()
-	df = df[(df['is_direct'] == True)]
-	cols = ['target.gene_info.symbol', 'disease.efo_info.therapeutic_area.labels', 'disease.efo_info.label',
-	        'association_score.overall',
-	        'association_score.datatypes.genetic_association',
-	        'association_score.datatypes.known_drug',
-	        'association_score.datatypes.literature',
-	        'association_score.datatypes.animal_model',
-	        'association_score.datatypes.affected_pathway',
-	        'association_score.datatypes.rna_expression',
-	        'association_score.datatypes.somatic_mutation']
-	rename = {'association_score.datatypes.affected_pathway': 'affected_pathway',
-	          'association_score.datatypes.animal_model': 'animal_model',
-	          'association_score.datatypes.genetic_association': 'genetic_association',
-	          'association_score.datatypes.known_drug': 'known_drug',
-	          'association_score.datatypes.literature': 'litterature_mining',
-	          'association_score.datatypes.rna_expression': 'rna_expression',
-	          'association_score.datatypes.somatic_mutation': 'somatic_mutation',
-	          'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
-	          'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
-	df = df[cols]
-	df = df.round(2)
-	df = df[df['association_score.overall'] > 0.05]
-	df.rename(columns=rename, inplace=True)
-	return df
-
-
 def write_excel_header(header_dict, worksheet, format):
 	for head in header_dict.keys():
 		if len(header_dict[head]) == 2:
@@ -361,11 +135,10 @@ def write_excel_header(header_dict, worksheet, format):
 			worksheet.merge_range(row, col, last_row, last_col, head, format)
 
 
-def get_single_excel(target_id):
-	if (list_of_entries.Target_id == target_id).any():
-		writer = pd.ExcelWriter(output_single_path + list_of_entries[list_of_entries.Target_id == target_id].to_string(
-			columns=['Gene_name'], header=False, index=False) + '_' + target_id + '.xlsx',
-		                        engine='xlsxwriter', options={'nan_inf_to_errors': True})
+def get_single_excel(target):
+	if target.uniprot_id in list_of_entries.index:
+		output_name = Path(output_single_path).joinpath(target.name + '_' + target.uniprot_id + '.xlsx')
+		writer = pd.ExcelWriter(str(output_name),engine='xlsxwriter', options={'nan_inf_to_errors': True})
 
 		workbook = writer.book
 
@@ -412,20 +185,17 @@ def get_single_excel(target_id):
 
 		# ================= GET THE DIFFERENT DATAFRAMES ====================#
 
-		res = tf.get_single_features(target_id, dbase=targetDB)
+		res = tf.get_single_features(target.uniprot_id, dbase=targetDB)
 
 		# =================== FILLING THE WORKSHEETS ========================#
 
 		# =============== GETTING OPENTARGETS + PUBMED DATAFRAMES ======================#
 		sequence = None
 		pubmed = pd.DataFrame(data=None)
-		opentarget = pd.DataFrame(data=None)
 
 		if not res['general_info'].empty:
 			if pubmed_email:
-				pubmed = pubmed_search(res['general_info'].iloc[0]['Gene_name'], pubmed_email)
-			search_term = res['general_info'].iloc[0]['Gene_name']
-			opentarget = open_target_association(search_term)
+				pubmed = pubmed_search(target.name, pubmed_email)
 
 		# ============================ PUBMED TAB ===============================#
 		if not pubmed.empty:
@@ -440,9 +210,9 @@ def get_single_excel(target_id):
 				writer.sheets['Pubmed_search'].write(0, col_num, value, vert_col_header)
 
 		# ========================== OPENTARGET TAB ===============================#
-		if not opentarget.empty:
-			opentarget.to_excel(writer, sheet_name='open_target_association', index=False)
-			for col_num, value in enumerate(opentarget.columns.values):
+		if not res['open_target'].empty:
+			res['open_target'].to_excel(writer, sheet_name='open_target_association', index=False)
+			for col_num, value in enumerate(res['open_target'].columns.values):
 				writer.sheets['open_target_association'].write(0, col_num, value, vert_col_header)
 
 		# ============================ GENERAL TAB ===============================#
@@ -472,7 +242,7 @@ def get_single_excel(target_id):
 					else:
 						col = col + 1
 						wb_general_info.write(row, col, v, wrap)
-			target_desc = td.get_descriptors(target_id, targetdb=targetDB, tcrdDB=tcrd)
+			target_desc = td.get_descriptors(target.uniprot_id, targetdb=targetDB)
 			target_score = td.make_score(target_desc)
 			spider_plot = td.make_spider_plot(target_score.loc[0].values, target_score.columns,
 			                                  target_name=res['general_info'].iloc[0]['Gene_name'])
@@ -595,6 +365,7 @@ def get_single_excel(target_id):
 				wb_expression.write(row, col, res['tissue_expression'].iloc[i]['tissue'])
 				wb_expression.merge_range(row, col + 1, row, col + 2, res['tissue_expression'].iloc[i]['cell'])
 				wb_expression.write(row, col + 3, res['tissue_expression'].iloc[i]['value'])
+
 		# brain_chart = workbook.add_chart({'type': 'bar'})
 		# brain_chart.add_series({'values': '=expression!$N$3:$N$13',
 		#                         'categories': '=expression!$K$3:$L$13',
@@ -941,7 +712,7 @@ def get_single_excel(target_id):
 			bdb = res['bindingDB'].copy()
 			columns = ['ZincID', 'IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)', 'pH', 'Temp',
 			           'Source', 'DOI', 'Patent_number', 'Institution', 'ligand_name', 'SMILES', 'HBA', 'HBD', 'LogD',
-			           'LogP', 'MW', 'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'n_alerts', 'pass_ro3', 'ro5_violations',
+			           'LogP', 'MW', 'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'pass_ro3', 'ro5_violations',
 			           'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class', 'class_def', 'max_phase',
 			           'oral']
 			bdb = bdb[((bdb[['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']] <= 10000) & (
@@ -977,59 +748,64 @@ def get_single_excel(target_id):
 
 		# ======================== CLOSING FILE ==================================#
 		workbook.close()
+		print('[FILE]: File for ',target.name,' generated [',output_name,']')
 	else:
-		return print("Gene with ID [", target_id, '] not present in the database. Run the druggability_DB command '
-		                                          'to run the analysis on it')
+		return print("Gene named ", target.name, " with ID [", target.uniprot_id,
+		             '] not present in the database. Run the druggability_DB command to run the analysis on it')
 
 
 def get_list_excel(list_targets):
 	not_in_db = {'Not present in DB': []}
 
-	if not list_targets:
+	if list_targets.empty:
 		return print("No genes that you entered are in the Database")
 
 	if pubmed_email:
 		pubmed = {'Target_id': [], 'total # publications': [], 'number of Dementia publications': []}
-		for name, id in list_targets.items():
-			pubmed['Target_id'].append(id)
-			pubmed['number of Dementia publications'].append(
-				pubmed_search(name, pubmed_email, return_number=True, mesh_term='Dementia'))
-			pubmed['total # publications'].append(pubmed_search(name, pubmed_email, return_number=True))
+		for gene_symbol in list_targets.index:
+			pubmed['Target_id'].append(list_targets.uniprot_id.loc[gene_symbol])
+			pubmed['number of Dementia publications'].append(pubmed_search(gene_symbol, pubmed_email, return_number=True, mesh_term='Dementia'))
+			pubmed['total # publications'].append(pubmed_search(gene_symbol, pubmed_email, return_number=True))
 		# TODO: Mesh term is hard-coded here
 		pubmed = pd.DataFrame.from_dict(pubmed)
 	else:
 		pubmed = pd.DataFrame()
 
-	gene_ids = "','".join(list_targets.values())
+	gene_ids = "','".join(list_targets.uniprot_id.astype(str))
 
-	data = td.get_descriptors_list(gene_ids, targetdb=targetDB, tcrdDB=tcrd)
+	data = td.get_descriptors_list(gene_ids, targetdb=targetDB)
 	data = data.merge(pubmed, on='Target_id', how='left')
 	list_done = data.Target_id.values.tolist()
 
-	for name, id in list_targets.items():
-		if id not in list_done:
-			not_in_db['Not present in DB'].append(name)
+	for gene_symbol in list_targets.index:
+		if list_targets.uniprot_id.loc[gene_symbol] not in list_done:
+			not_in_db['Not present in DB'].append(gene_symbol)
 	not_in_db = pd.DataFrame.from_dict(not_in_db)
 
 	t = time.strftime("%d%b%Y_%H%M%S")
-	writer = pd.ExcelWriter(output_lists_path + 'Export_' + str(len(data)) + '_entries_' + t + '.xlsx',
-	                        engine='xlsxwriter')
-	data.to_excel(writer, 'Druggability_list', index=False)
+	output_file_name = Path(output_lists_path).joinpath('Export_' + str(len(data)) + '_entries_' + t + '.xlsx')
+
+	writer = pd.ExcelWriter(str(output_file_name),engine='xlsxwriter')
+
+	workbook = writer.book
+	vert_col_header = workbook.add_format({'bold': True, 'bg_color': '#D9D9D9', 'align': 'center', 'valign': 'bottom', 'rotation': 90})
+
+	data.to_excel(writer,sheet_name='Druggability_list', index=False)
+	for col_num,value in enumerate(data.columns.values):
+		writer.sheets['Druggability_list'].write(0,col_num,value,vert_col_header)
+
 	not_in_db.to_excel(writer, 'Not in DB', index=False)
 	writer.save()
 	print("[EXPORT]: Excel file: ", '[Export_' + str(len(data)) + '_entries_' + t + '.xlsx]', ' successfully generated')
 	return "Success"
 
 
-if __name__ == "__main__":
+def parse_args():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-g', '--gene', help='enter a single gene name', metavar='')
 	parser.add_argument('-i', '--in_file',
 	                    help='Name of the input file with a list of genes (.txt - 1 gene per line)',
 	                    metavar='')
-	parser.add_argument('-U', '--Uniprot_ID',
-	                    help='Enter the uniprot accession number followed by the name separated '
-	                         'by a comma(eg. Q9NZC2,TREM2)', metavar='')
 	parser.add_argument('-l', '--list_genes', help='Enter a list of gene name separated by a ","', metavar='')
 
 	parser.add_argument('-v', '--verbose', help="Print information", action='store_true', default=False)
@@ -1048,28 +824,45 @@ if __name__ == "__main__":
 	                    action='store_true',
 	                    default=False)
 	args = parser.parse_args()
+	if not args.gene and not args.in_file and not args.list_genes:
+		print('Please use one of the optional input options :')
+		parser.print_help()
+		sys.exit()
+	if not args.report_list and not args.report_single:
+		print('ERROR: Please provide a report type "-rl" for a list report, "-rs" for a single target report')
+		parser.print_help()
+		sys.exit()
+	return args
 
+
+def main():
+	global output_lists_path,output_single_path,targetDB,pubmed_email,list_of_entries
+	args = parse_args()
 	update_config = args.update_config
 	while True:
 		config = configparser.ConfigParser()
-		config_file_path = os.path.expanduser('~') + '/.druggability/config.ini'
-		os.makedirs(os.path.dirname(config_file_path), exist_ok=True)
+		config_file_path = Path('~/.druggability/config.ini').expanduser()
+		config_file_path.parent.mkdir(exist_ok=True, parents=True)
 
-		if os.path.exists(config_file_path) and not update_config:
-			config.read(config_file_path)
+		if config_file_path.is_file() and not update_config:
+			config.read(str(config_file_path))
 			todo = []
 			for var_name in config['database_path']:
-				if not os.path.isfile(config['database_path'][var_name]):
+				if var_name in ['chembl']:
+					continue
+				if not Path(config['database_path'][var_name]).is_file():
 					todo.append(var_name)
 			for var_name in config['output_path']:
-				if not os.path.isdir(config['output_path'][var_name]):
+				if var_name in ['db_files']:
+					continue
+				if not Path(config['output_path'][var_name]).is_dir() or config['output_path'][var_name] == '':
 					todo.append(var_name)
-			if not is_email(config['pubmed_email']['email']):
+			if not cf.is_email(config['pubmed_email']['email']):
 				todo.append('email')
 			if todo:
-				config = get_config_from_user(config, todo=todo)
-				with open(config_file_path, 'w') as cf:
-					config.write(cf)
+				config = cf.get_config_from_user(config, todo=todo)
+				with config_file_path.open(mode='w') as cfile:
+					config.write(cfile)
 			else:
 				# =============================# PATH TO SAVE REPORT FILES #============================#
 				output_lists_path = config['output_path']['list']
@@ -1077,65 +870,46 @@ if __name__ == "__main__":
 				# =============================# PATH TO SQLITE DB #============================#
 
 				targetDB = config['database_path']['targetdb']
-				chembl_24 = config['database_path']['chembl']
-				tcrd = config['database_path']['tcrd']
 				pubmed_email = config['pubmed_email']['email']
 				break
 		else:
-			config['database_path'] = {}
-			config['output_path'] = {}
-			config['pubmed_email'] = {}
-			config = get_config_from_user(config)
-			with open(config_file_path, 'w') as cf:
-				config.write(cf)
+			config = cf.get_config_from_user(config, todo=['list', 'single', 'targetdb', 'email'],new=True)
+			with config_file_path.open(mode='w') as cfile:
+				config.write(cfile)
 			update_config = False
 
 	while True:
 		if args.in_file:
-			if os.path.exists(args.in_file):
+			if Path(args.in_file).is_file():
 				with open(args.in_file, 'r') as gene_list:
-					if args.Uniprot_ID:
-						gene_dict = {}
-						for i in gene_list.readlines():
-							i = i.rstrip('\n').split(',')
-							gene_dict[i[1]] = i[0]
-					else:
-						list_of_genes = gene_list.readlines()
-						gene_dict = gene_to_uniprotid_local(list_of_genes)
+					list_of_genes = gene_list.readlines()
+					gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 				break
 			else:
 				print('ERROR : file inputed as argument [-i] does not exist')
 				sys.exit()
 		if args.gene:
 			list_of_genes = [args.gene]
-			gene_dict = gene_to_uniprotid_local(list_of_genes)
+			gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
 		elif args.list_genes:
 			list_of_genes = args.list_genes.split(',')
-			gene_dict = gene_to_uniprotid_local(list_of_genes)
+			gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
-		elif args.Uniprot_ID:
-			try:
-				ID_name = args.Uniprot_ID.split(',')
-				gene_dict = {ID_name[1]: ID_name[0]}
-			except IndexError:
-				print(
-					'ERROR : Please enter the uniprot ID followed by the gene name separated by a comma (eg. Q9NZC2,TREM2)')
-				sys.exit()
-			break
-		else:
-			print('Please use one of the optional input options :')
-			parser.print_help()
-			sys.exit()
 
 	list_of_entries = get_list_entries()
 
 	if args.report_single:
-		for gene_id in gene_dict.values():
-			get_single_excel(gene_id)
+		for gene_name in gene_df.index:
+			get_single_excel(gene_df.loc[gene_name])
 	elif args.report_list:
-		get_list_excel(gene_dict)
-	else:
-		print('ERROR: Please provide a report type "-rl" for a list report, "-rs" for a single target report')
-		parser.print_help()
-		sys.exit()
+		get_list_excel(gene_df)
+
+
+def entry_point():
+	main()
+
+
+if __name__ == "__main__":
+	entry_point()
+
