@@ -18,7 +18,6 @@ python version **>= 3.4**
 
 Preferred python distribution : [Anaconda 3](https://www.anaconda.com/download/)
 
-****
 
 #### Database files installation
 
