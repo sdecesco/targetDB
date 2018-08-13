@@ -5,8 +5,10 @@ import pandas as pd
 
 
 def gene_to_id(list_of_genes,targetDB_path=None):
+	print('[NAME CONVERSION]: Converting gene names into IDs (Uniprot,Ensembl,HGNC)')
 	connector = sqlite3.connect(targetDB_path)
 	gene_list = []
+	required_columns = ['alias_symbol', 'ensembl_gene_id', 'prev_symbol', 'symbol','uniprot_ids']
 	for gene in list_of_genes:
 		gene = gene.rstrip('\n')
 		gene = gene.rstrip('\r')
@@ -14,42 +16,23 @@ def gene_to_id(list_of_genes,targetDB_path=None):
 	gene_ids = "','".join(gene_list)
 	gene_id_query = """SELECT * FROM hgnc as hgn WHERE hgn.hgnc_id in (SELECT hg.hgnc_id FROM hgnc as hg WHERE hg.xref_value in ('%s'))""" % gene_ids
 	gene_xref = pd.read_sql(gene_id_query, con=connector)
+	xref_df = gene_xref[gene_xref.xref_name.isin(['symbol', 'uniprot_ids', 'ensembl_gene_id', 'prev_symbol', 'alias_symbol'])]
+	xref_piv = xref_df.pivot_table(index='hgnc_id', values='xref_value', columns='xref_name',
+	                               aggfunc=lambda x: ';'.join(x), fill_value='')
+	for col in required_columns:
+		if col not in xref_piv.columns:
+			xref_piv[col] = ''
+	xref_piv.uniprot_ids = xref_piv.uniprot_ids.apply(lambda x: list(filter(None, x.split(';'))))
 	connector.close()
-	output = pd.DataFrame(columns=['uniprot_id','hgnc_id','ensembl_id'])
+	list_of_ids = []
 	for gene in gene_list:
-		gene_id = gene_xref[(gene_xref.xref_value == gene) & (gene_xref.xref_name == 'symbol')]['hgnc_id']
-		if gene_id.size == 0:
-			gene_id = gene_xref[(gene_xref.xref_value == gene) & ((gene_xref.xref_name == 'prev_symbol') | (gene_xref.xref_name == 'alias_symbol'))]['hgnc_id']
-		if gene_id.size == 0:
-			output.loc[gene] = [None, None, None]
-			continue
-		elif gene_id.size > 1:
-			for g_id in gene_id:
-				gene_name = gene_xref.xref_value.loc[gene_xref[(gene_xref.hgnc_id == g_id) & (gene_xref.xref_name == 'symbol')].first_valid_index()]
-				gene_uniprot = gene_xref[(gene_xref.hgnc_id == g_id) & (gene_xref.xref_name == 'uniprot_ids')].xref_value.values
-				gene_ensembl = gene_xref.loc[gene_xref[(gene_xref.hgnc_id == g_id) &(gene_xref.xref_name=='ensembl_gene_id')].first_valid_index(),'xref_value']
-				if gene_uniprot.size > 1:
-					count = 0
-					for uniprot_id in gene_uniprot:
-						name = gene_name + '_' + str(count)
-						output.loc[name] = [uniprot_id,g_id,gene_ensembl]
-						count += 1
-				elif gene_uniprot.size == 0:
-					output.loc[gene_name] = [None, g_id, gene_ensembl]
-				else:
-					output.loc[gene_name] = [gene_uniprot.loc[gene_uniprot.first_valid_index()], g_id, gene_ensembl]
-		else:
-			gene_name = gene_xref.xref_value.loc[gene_xref[(gene_xref.hgnc_id == gene_id.loc[gene_id.first_valid_index()]) & (gene_xref.xref_name == 'symbol')].first_valid_index()]
-			gene_uniprot = gene_xref[(gene_xref.hgnc_id == gene_id.loc[gene_id.first_valid_index()]) & (gene_xref.xref_name == 'uniprot_ids')].xref_value
-			gene_ensembl = gene_xref.loc[gene_xref[(gene_xref.hgnc_id == gene_id.loc[gene_id.first_valid_index()]) & (gene_xref.xref_name == 'ensembl_gene_id')].first_valid_index(), 'xref_value']
-			if gene_uniprot.size > 1:
-				count = 0
-				for uniprot_id in gene_uniprot:
-					name = gene_name + '_' + str(count)
-					output.loc[name] = [uniprot_id, gene_id.loc[gene_id.first_valid_index()], gene_ensembl]
-					count += 1
-			elif gene_uniprot.size == 0:
-				output.loc[gene_name] = [None, gene_id.loc[gene_id.first_valid_index()], gene_ensembl]
-			else:
-				output.loc[gene_name] = [gene_uniprot.loc[gene_uniprot.first_valid_index()], gene_id.loc[gene_id.first_valid_index()], gene_ensembl]
+		gene_id = xref_piv[xref_piv.symbol == gene].index.tolist()
+		if len(gene_id) == 0:
+			gene_id = xref_df[(xref_df.xref_value == gene) & (
+						(xref_df.xref_name == 'prev_symbol') | (xref_df.xref_name == 'alias_symbol'))][
+				'hgnc_id'].tolist()
+		if len(gene_id) != 0:
+			list_of_ids.extend(gene_id)
+	output = xref_piv.loc[list_of_ids]
+	print('[NAME CONVERSION]: Conversion Done')
 	return output

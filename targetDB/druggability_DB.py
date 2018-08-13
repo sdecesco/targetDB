@@ -1312,7 +1312,7 @@ class Target:
 
 		while True:
 			# ==============# IF NO UNIPROT ID --> SKIP #====================#
-			if self.swissprotID == 'No Match':
+			if self.swissprotID == '' or self.swissprotID is None:
 				if verbose:
 					print('[GENE SKIPPED]: No UniprotID found for ' + self.gene)
 				break
@@ -1488,17 +1488,18 @@ class Target:
 			# ====================# END OF THE BLAST SECTION #============================#
 			# ============================================================================#
 
+			# ======================# WRITING TO THE DATABASE #===========================#
+			write_to_db(self, targetDB)
 			break
 		# ============================================================================#
 		# =================# END OF DATA GATHERING SECTION #==========================#
 		# ============================================================================#
 
-		# ======================# WRITING TO THE DATABASE #===========================#
-		write_to_db(self, targetDB)
+
 
 		script_stop = time.time()
 		if verbose:
-			print('[END OF GENE]: ' + self.gene + ' (in ' + str(round(script_stop - script_start)) + ' sec.)')
+			print('[END OF GENE]: ' + self.gene + ' (in ' + str(round(script_stop - script_start)) + ' sec)')
 			print('=======================================================================')
 
 
@@ -1610,32 +1611,35 @@ def main():
 
 	entries_in_db = get_list_entries(target_db_path=targetDB)
 
-	for gene_name in gene_df.index:
-		if gene_df.uniprot_id.loc[gene_name] in entries_in_db.index:
-			if args.update:
-				activate_fk_sql = """PRAGMA foreign_keys = 1"""
-				delete_sql = """DELETE FROM Targets WHERE Target_id='%s'""" % gene_df.uniprot_id.loc[gene_name]
+	for g_id in gene_df.index:
+		if not gene_df.uniprot_ids.loc[g_id]:
+			if args.verbose:
+				print('[GENE SKIPPED]: No uniprot id was found for the entered gene name: ',gene_df.symbol.loc[g_id])
+		for uniprot_id in gene_df.uniprot_ids.loc[g_id]:
+			if uniprot_id in entries_in_db.index:
+				if args.update:
+					activate_fk_sql = """PRAGMA foreign_keys = 1"""
+					delete_sql = """DELETE FROM Targets WHERE Target_id='%s'""" % uniprot_id
+					tdb = sqlite3.connect(targetDB)
+					tdb.execute(activate_fk_sql)
+					tdb.execute(delete_sql)
+					tdb.commit()
+					tdb.close()
 
-				tdb = sqlite3.connect(targetDB)
-				tdb.execute(activate_fk_sql)
-				tdb.execute(delete_sql)
-				tdb.commit()
-				tdb.close()
+					Target(gene_df.symbol.loc[g_id], uniprot_id=uniprot_id,
+					       ensembl_id=gene_df.ensembl_gene_id.loc[g_id], hgnc_id=g_id,
+					       entries_in_db=entries_in_db, db_files_path=dbase_file_path, chembl=chembl_24, target_db=targetDB,
+					       blast_cores=args.num_core, v=args.verbose)
+				else:
+					if args.verbose:
+						print('[GENE SKIPPED]: Already present in the database: ' + gene_df.symbol.loc[g_id])
+						print('=======================================================================')
 
-				Target(gene_name, uniprot_id=gene_df.uniprot_id.loc[gene_name],
-				       ensembl_id=gene_df.ensembl_id.loc[gene_name], hgnc_id=gene_df.hgnc_id.loc[gene_name],
+			else:
+				Target(gene_df.symbol.loc[g_id], uniprot_id=uniprot_id,
+				       ensembl_id=gene_df.ensembl_gene_id.loc[g_id], hgnc_id=g_id,
 				       entries_in_db=entries_in_db, db_files_path=dbase_file_path, chembl=chembl_24, target_db=targetDB,
 				       blast_cores=args.num_core, v=args.verbose)
-			else:
-				if args.verbose:
-					print('[GENE SKIPPED]: Already present in the database: ' + gene_name)
-					print('=======================================================================')
-
-		else:
-			Target(gene_name, uniprot_id=gene_df.uniprot_id.loc[gene_name],
-			       ensembl_id=gene_df.ensembl_id.loc[gene_name], hgnc_id=gene_df.hgnc_id.loc[gene_name],
-			       entries_in_db=entries_in_db, db_files_path=dbase_file_path, chembl=chembl_24, target_db=targetDB,
-			       blast_cores=args.num_core, v=args.verbose)
 
 
 def entry_point():
