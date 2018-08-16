@@ -12,8 +12,9 @@ Bioparser = PDBParser(PERMISSIVE=1, QUIET=True)
 io = PDBIO()
 
 
-def fpocket_launcher(pdb, pdb_file, sphere_size_min=3.0):
-	print('[POCKET SEARCH]:  (' + str(pdb_file) + ')')
+def fpocket_launcher(pdb, pdb_file, sphere_size_min=3.0,verbose=False):
+	if verbose:
+		print('[POCKET SEARCH]: ' + str(pdb_file))
 	subprocess.check_output([fpocket_path, '-f', str(pdb)])
 
 
@@ -60,7 +61,7 @@ class ChainSelect(Select):
 
 
 def get_pockets(path, sphere_size=3.0, pdb_info=pd.DataFrame(), domain=pd.DataFrame(), alternate=False, alternate_pdb=pd.DataFrame(),
-				uniprot_id=None,fpocket_exe=None):
+				uniprot_id=None,fpocket_exe=None,verbose=False):
 	global fpocket_path
 	fpocket_path = fpocket_exe
 
@@ -149,25 +150,27 @@ def get_pockets(path, sphere_size=3.0, pdb_info=pd.DataFrame(), domain=pd.DataFr
 				if out_pockets_dir_path.is_dir():
 					p_out = len([x for x in out_pockets_dir_path.iterdir()])
 					if p_out!=0:
-						print('[POCKET ALREADY EXISTS]: ' + pdb_code)
+						if verbose:
+							print('[POCKET ALREADY EXISTS]: ' + pdb_code)
 						pockets = parse_pockets(str(out_file_path))
 						results[pdb_code] = get_object(pockets, pdb_code, str(out_pockets_dir_path), info,
 													   domain)
 						continue
 					else:
-						fpocket_launcher(pdb_strip_path, pdb_file, sphere_size_min=sphere_size)
+						fpocket_launcher(pdb_strip_path, pdb_file, sphere_size_min=sphere_size,verbose=verbose)
 				else:
-					fpocket_launcher(pdb_strip_path, pdb_file, sphere_size_min=sphere_size)
+					fpocket_launcher(pdb_strip_path, pdb_file, sphere_size_min=sphere_size,verbose=verbose)
 			else:
-				fpocket_launcher(pdb_strip_path, pdb_file, sphere_size_min=sphere_size)
+				fpocket_launcher(pdb_strip_path, pdb_file, sphere_size_min=sphere_size,verbose=verbose)
 		else:
-			fpocket_launcher(pdb_strip_path, pdb_file, sphere_size_min=sphere_size)
+			fpocket_launcher(pdb_strip_path, pdb_file, sphere_size_min=sphere_size,verbose=verbose)
 		if out_path.is_dir():
 			if out_file_path.is_file():
 				if out_pockets_dir_path.is_dir():
 					p_out = len([x for x in out_pockets_dir_path.iterdir()])
 					if p_out != 0:
-						print('[POCKET SEARCH DONE]: ' + pdb_code)
+						if verbose:
+							print('[POCKET SEARCH DONE]: ' + pdb_code)
 						pockets = parse_pockets(str(out_file_path))
 						results[pdb_code] = get_object(pockets, pdb_code, str(out_pockets_dir_path), info,
 													   domain)

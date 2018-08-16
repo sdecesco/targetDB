@@ -35,4 +35,5 @@ def gene_to_id(list_of_genes,targetDB_path=None):
 			list_of_ids.extend(gene_id)
 	output = xref_piv.loc[list_of_ids]
 	print('[NAME CONVERSION]: Conversion Done')
+	output.drop_duplicates(subset=['index','ensembl_gene_id','symbol'],inplace=True)
 	return output

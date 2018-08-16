@@ -1112,6 +1112,7 @@ def write_to_db(target, db_path):
 	# ========# FILLING THE ISOFORMS + ISOFORMS MODIFICATIONS TABLES #=========#
 
 	isoforms_mods = []
+	target.isoforms.isoid = target.swissprotID+'_'+target.isoforms.isoid
 	for i in target.isoforms.index:
 		for j in target.isoforms.seq_mod.loc[i]:
 			if j in ('Displayed', 'External'):
@@ -1136,18 +1137,20 @@ def write_to_db(target, db_path):
 	target.pdb.drop(pdb_in.PDB_code, errors='ignore', inplace=True)
 
 	pdb_domains = pd.DataFrame(columns=['Chain_id', 'Domain_id'])
-	for chain in target.pdb_info.index:
-		for domain in target.pdb_info.domain_id.loc[chain]:
-			pdb_domains.loc[chain] = {'Chain_id': chain, 'Domain_id': domain}
 
 	target.pdb.drop(columns=['Chain', 'path', 'Domain'], inplace=True)
 	target.pdb.to_sql('PDB', con=connector, if_exists='append', index=False)
 
 	if not target.pdb_info.empty:
+
 		target.pdb_info.start_stop_pairs = target.pdb_info.start_stop_pairs.apply(
 			lambda x: ' | '.join(str(i[0]) + '-' + str(i[1]) for i in x))
 		target.pdb_info['Target_id'] = target.swissprotID
 		target.pdb_info.equal = target.pdb_info.equal.apply(lambda x: ','.join(list(set(x))))
+		target.pdb_info.index = target.swissprotID+'_'+target.pdb_info.index
+		for chain in target.pdb_info.index:
+			for domain in target.pdb_info.domain_id.loc[chain]:
+				pdb_domains.loc[chain] = {'Chain_id': chain, 'Domain_id': domain}
 		target.pdb_info.reset_index(inplace=True)
 		target.pdb_info.rename(columns={'index': 'Chain_id', 'chain_name': 'Chain', 'equal': 'equal_chains',
 		                                'length': 'n_residues', 'sequence': 'Sequence', 'start': 'Start',
@@ -1270,7 +1273,7 @@ def write_to_db(target, db_path):
 
 
 class Target:
-	def __init__(self, gname, uniprot_id=None, ensembl_id=None, hgnc_id=None, v=False, entries_in_db=None,
+	def __init__(self, gname, uniprot_id=None, ensembl_id=None, hgnc_id=None, v=False,
 	             db_files_path=None, chembl=None, target_db=None, blast_cores=8):
 		global verbose
 		global chembl_24
@@ -1319,14 +1322,6 @@ class Target:
 
 			if verbose:
 				print('[BEGINNING OF GENE]: ' + self.gene + ' (' + str(self.swissprotID) + ')')
-
-			# =============# Checking if entry already in DB #================#
-
-			if self.swissprotID in entries_in_db.index:
-
-				# =============== IF IN DB --> reconstruct the domain and variants variable for further use ===========#
-				if verbose:
-					print("[GENE INFO]: Target already present in database, updating informations")
 
 			# ============# COLLECTING THE UNIPROT RECORD #===============#
 			self.record = get_uniprot(self.swissprotID)
@@ -1421,7 +1416,7 @@ class Target:
 				# =====================# GET POCKETS (source: fpockets) ======================#
 
 				self.pockets = pocket.get_pockets(self.path, sphere_size=3, pdb_info=self.pdb, domain=self.domain,
-				                                  uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe)
+				                                  uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 				self.druggable_pockets = self.pockets['pockets'][self.pockets['pockets'].druggable == 'TRUE'].copy()
 
 			pdb_super_list = list(res_pdb.PDB_code) + list(self.pdb.index)
@@ -1475,12 +1470,12 @@ class Target:
 			if res_pockets.empty and self.druggable_pockets.empty:
 				self.alternate_pockets = pocket.get_pockets(self.path, sphere_size=3, alternate=True,
 				                                            alternate_pdb=self.alternate_pdb,
-				                                            uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe)
+				                                            uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 			else:
 				if not very_close_pdb.empty:
 					self.alternate_pockets = pocket.get_pockets(self.path, sphere_size=3, alternate=True,
 					                                            alternate_pdb=very_close_pdb,
-					                                            uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe)
+					                                            uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 
 			self.neighbours = proteins_blast(self.sequence, self.swissprotID, self.gene, self.path)
 
@@ -1609,15 +1604,16 @@ def main():
 			gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
 
-	entries_in_db = get_list_entries(target_db_path=targetDB)
-
 	for g_id in gene_df.index:
-		if not gene_df.uniprot_ids.loc[g_id]:
+		if len(gene_df.uniprot_ids.loc[g_id]) == 0:
 			if args.verbose:
 				print('[GENE SKIPPED]: No uniprot id was found for the entered gene name: ',gene_df.symbol.loc[g_id])
 		for uniprot_id in gene_df.uniprot_ids.loc[g_id]:
+			entries_in_db = get_list_entries(target_db_path=targetDB)
 			if uniprot_id in entries_in_db.index:
 				if args.update:
+					if args.verbose:
+						print("[GENE INFO]: Target already present in database, updating informations")
 					activate_fk_sql = """PRAGMA foreign_keys = 1"""
 					delete_sql = """DELETE FROM Targets WHERE Target_id='%s'""" % uniprot_id
 					tdb = sqlite3.connect(targetDB)
@@ -1627,8 +1623,7 @@ def main():
 					tdb.close()
 
 					Target(gene_df.symbol.loc[g_id], uniprot_id=uniprot_id,
-					       ensembl_id=gene_df.ensembl_gene_id.loc[g_id], hgnc_id=g_id,
-					       entries_in_db=entries_in_db, db_files_path=dbase_file_path, chembl=chembl_24, target_db=targetDB,
+					       ensembl_id=gene_df.ensembl_gene_id.loc[g_id], hgnc_id=g_id,db_files_path=dbase_file_path, chembl=chembl_24, target_db=targetDB,
 					       blast_cores=args.num_core, v=args.verbose)
 				else:
 					if args.verbose:
@@ -1637,8 +1632,7 @@ def main():
 
 			else:
 				Target(gene_df.symbol.loc[g_id], uniprot_id=uniprot_id,
-				       ensembl_id=gene_df.ensembl_gene_id.loc[g_id], hgnc_id=g_id,
-				       entries_in_db=entries_in_db, db_files_path=dbase_file_path, chembl=chembl_24, target_db=targetDB,
+				       ensembl_id=gene_df.ensembl_gene_id.loc[g_id], hgnc_id=g_id, db_files_path=dbase_file_path, chembl=chembl_24, target_db=targetDB,
 				       blast_cores=args.num_core, v=args.verbose)
 
 

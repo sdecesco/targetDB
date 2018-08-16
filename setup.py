@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
 	name="targetDB",
-	version="1.0.1",
+	version="1.0.2",
 	author="Stephane De Cesco",
 	author_email="stephane.decesco@ndm.ox.ac.uk",
 	description="Package with an application to generate report on potential drug targets",
