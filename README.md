@@ -34,9 +34,8 @@ This script can be used in two modes :
 The only required databases is :
 + targetDB
 
-You can download a copy of the database [HERE]()*
+You can download a copy of the database [HERE](https://github.com/sdecesco/targetDB/releases/download/v1.1.0/TargetDB_14_08_18.db.zip)
 
-*Currently unavailable (will be uploaded in a few weeks)
 >This database contains all of the human genome genes that have a uniprot ID
 
 ##### Database creation
