@@ -120,7 +120,17 @@ def get_humanmine_data(gene):
 	if query.count() == 1:
 		primary_id = list(query.rows())[0]["id"]
 	else:
-		return disease, phenotypes, differential_exp_diseases, differential_exp_tissues, gwas, pathways
+		pathways_df = pd.DataFrame(columns=['pathway_dataset', 'pathway_name'])
+		disease_df = pd.DataFrame(columns=['disease', 'disease_id'])
+		phenotypes_df = pd.DataFrame(
+			columns=['gene', 'organism', 'Allele_id', 'Phenotype', 'Phenotype_desc', 'genotype', 'zygosity',
+			         'Allele_symbol', 'Allele_type'])
+		differential_exp_diseases_df = pd.DataFrame(
+			columns=['Condition', 'T_statistic', 'expression_status', 'p_value'])
+		differential_exp_tissues_df = pd.DataFrame(columns=['T_statistic', 'Tissue', 'expression_status', 'p_value'])
+		gwas_df = pd.DataFrame(columns=['doi', 'first_author', 'organism', 'p_value', 'phenotype',
+		                                'publication_year', 'pubmed_id'])
+		return disease_df, phenotypes_df, differential_exp_diseases_df, differential_exp_tissues_df, gwas_df, pathways_df
 
 	query = service.new_query("Gene")
 	query.add_view("diseases.primaryIdentifier", "diseases.name")
