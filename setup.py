@@ -5,7 +5,6 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
 	name="targetDB",
-<<<<<<< HEAD
 	version="1.1.1",
 	author="Stephane De Cesco",
 	author_email="stephane.decesco@ndm.ox.ac.uk",
