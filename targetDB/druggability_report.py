@@ -764,22 +764,24 @@ def get_list_excel(list_targets):
 	if pubmed_email:
 		pubmed = {'Target_id': [], 'total # publications': [], 'number of Dementia publications': []}
 		for gene_symbol in list_targets.index:
-			pubmed['Target_id'].append(list_targets.uniprot_id.loc[gene_symbol])
-			pubmed['number of Dementia publications'].append(pubmed_search(gene_symbol, pubmed_email, return_number=True, mesh_term='Dementia'))
-			pubmed['total # publications'].append(pubmed_search(gene_symbol, pubmed_email, return_number=True))
+			pubmed['Target_id'].extend(list_targets.uniprot_ids.loc[gene_symbol])
+			pubmed['number of Dementia publications'].append(pubmed_search(list_targets.symbol.loc[gene_symbol], pubmed_email, return_number=True, mesh_term='Dementia'))
+			pubmed['total # publications'].append(pubmed_search(list_targets.symbol.loc[gene_symbol], pubmed_email, return_number=True))
 		# TODO: Mesh term is hard-coded here
 		pubmed = pd.DataFrame.from_dict(pubmed)
 	else:
 		pubmed = pd.DataFrame()
 
-	gene_ids = "','".join(list_targets.uniprot_id.astype(str))
+	gene_ids = "','".join(list_targets.uniprot_ids.astype(str))
+	gene_ids = gene_ids.replace('[\'', '').replace('\']', '')
+
 
 	data = td.get_descriptors_list(gene_ids, targetdb=targetDB)
 	data = data.merge(pubmed, on='Target_id', how='left')
 	list_done = data.Target_id.values.tolist()
 
 	for gene_symbol in list_targets.index:
-		if list_targets.uniprot_id.loc[gene_symbol] not in list_done:
+		if list_targets.uniprot_ids.loc[gene_symbol] not in list_done:
 			not_in_db['Not present in DB'].append(gene_symbol)
 	not_in_db = pd.DataFrame.from_dict(not_in_db)
 
