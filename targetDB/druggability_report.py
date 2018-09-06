@@ -765,8 +765,8 @@ def get_list_excel(list_targets):
 		pubmed = {'Target_id': [], 'total # publications': [], 'number of Dementia publications': []}
 		for gene_symbol in list_targets.index:
 			pubmed['Target_id'].extend(list_targets.uniprot_ids.loc[gene_symbol])
-			pubmed['number of Dementia publications'].append(pubmed_search(list_targets.symbol.loc[gene_symbol], pubmed_email, return_number=True, mesh_term='Dementia'))
-			pubmed['total # publications'].append(pubmed_search(list_targets.symbol.loc[gene_symbol], pubmed_email, return_number=True))
+			pubmed['number of Dementia publications'].extend([pubmed_search(list_targets.symbol.loc[gene_symbol], pubmed_email, return_number=True, mesh_term='Dementia')]*len(list_targets.uniprot_ids.loc[gene_symbol]))
+			pubmed['total # publications'].extend([pubmed_search(list_targets.symbol.loc[gene_symbol], pubmed_email, return_number=True)]*len(list_targets.uniprot_ids.loc[gene_symbol]))
 		# TODO: Mesh term is hard-coded here
 		pubmed = pd.DataFrame.from_dict(pubmed)
 	else:
@@ -774,7 +774,6 @@ def get_list_excel(list_targets):
 
 	gene_ids = "','".join(list_targets.uniprot_ids.astype(str))
 	gene_ids = gene_ids.replace('[\'', '').replace('\']', '')
-
 
 	data = td.get_descriptors_list(gene_ids, targetdb=targetDB)
 	data = data.merge(pubmed, on='Target_id', how='left')
