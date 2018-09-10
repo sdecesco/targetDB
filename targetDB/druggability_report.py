@@ -30,27 +30,27 @@ def get_list_entries():
 @ret.retryer_pubmed(max_retries=10, timeout=5)
 def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	dict_medline = {"AB": "Abstract", "CI": "Copyright Information", "AD": "Affiliation", "AUID": "Author ID",
-	                "IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
-	                "FAU": "Full Author", "CN": "Corporate Author", "DCOM": "Date Completed", "DA": "Date Created",
-	                "LR": "Date Last Revised", "DEP": "Date of Electronic Publication", "DP": "Date of Publication",
-	                "EDAT": "Entrez Date", "GS": "Gene Symbol", "GN": "General Note", "GR": "Grant Number",
-	                "IR": "Investigator Name", "FIR": "Full Investigator Name", "IS": "ISSN", "IP": "Issue",
-	                "TA": "Journal Title Abbreviation", "JT": "Journal Title", "LA": "Language",
-	                "LID": "Location Identifier", "MID": "Manuscript Identifier", "MHDA": "MeSH Date",
-	                "MH": "MeSH Terms", "JID": "NLM Unique ID", "RF": "Number of References", "OAB": "Other Abstract",
-	                "OCI": "Other Copyright Information", "OID": "Other ID", "OT": "Other Term",
-	                "OTO": "Other Term Owner", "OWN": "Owner", "PG": "Pagination", "PS": "Personal Name as Subject",
-	                "FPS": "Full Personal Name as Subject", "PL": "Place of Publication",
-	                "PHST": "Publication History Status", "PST": "Publication Status", "PT": "Publication Type",
-	                "PUBM": "Publishing Model", "PMC": "PubMed Central Identifier", "PMID": "PMID",
-	                "RN": "Registry Number/EC Number", "NM": "Substance Name", "SI": "Secondary Source ID",
-	                "SO": "Source", "SFM": "Space Flight Mission", "STAT": "Status", "SB": "Subset", "TI": "Title",
-	                "TT": "Transliterated Title", "VI": "Volume", "CON": "Comment on", "CIN": "Comment in",
-	                "EIN": "Erratum in", "EFR": "Erratum for", "CRI": "Corrected and Republished in",
-	                "CRF": "Corrected and Republished from", "PRIN": "Partial retraction in",
-	                "PROF": "Partial retraction of", "RPI": "Republished in", "RPF": "Republished from",
-	                "RIN": "Retraction in", "ROF": "Retraction of", "UIN": "Update in", "UOF": "Update of",
-	                "SPIN": "Summary for patients in", "ORI": "Original report in"}
+					"IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
+					"FAU": "Full Author", "CN": "Corporate Author", "DCOM": "Date Completed", "DA": "Date Created",
+					"LR": "Date Last Revised", "DEP": "Date of Electronic Publication", "DP": "Date of Publication",
+					"EDAT": "Entrez Date", "GS": "Gene Symbol", "GN": "General Note", "GR": "Grant Number",
+					"IR": "Investigator Name", "FIR": "Full Investigator Name", "IS": "ISSN", "IP": "Issue",
+					"TA": "Journal Title Abbreviation", "JT": "Journal Title", "LA": "Language",
+					"LID": "Location Identifier", "MID": "Manuscript Identifier", "MHDA": "MeSH Date",
+					"MH": "MeSH Terms", "JID": "NLM Unique ID", "RF": "Number of References", "OAB": "Other Abstract",
+					"OCI": "Other Copyright Information", "OID": "Other ID", "OT": "Other Term",
+					"OTO": "Other Term Owner", "OWN": "Owner", "PG": "Pagination", "PS": "Personal Name as Subject",
+					"FPS": "Full Personal Name as Subject", "PL": "Place of Publication",
+					"PHST": "Publication History Status", "PST": "Publication Status", "PT": "Publication Type",
+					"PUBM": "Publishing Model", "PMC": "PubMed Central Identifier", "PMID": "PMID",
+					"RN": "Registry Number/EC Number", "NM": "Substance Name", "SI": "Secondary Source ID",
+					"SO": "Source", "SFM": "Space Flight Mission", "STAT": "Status", "SB": "Subset", "TI": "Title",
+					"TT": "Transliterated Title", "VI": "Volume", "CON": "Comment on", "CIN": "Comment in",
+					"EIN": "Erratum in", "EFR": "Erratum for", "CRI": "Corrected and Republished in",
+					"CRF": "Corrected and Republished from", "PRIN": "Partial retraction in",
+					"PROF": "Partial retraction of", "RPI": "Republished in", "RPF": "Republished from",
+					"RIN": "Retraction in", "ROF": "Retraction of", "UIN": "Update in", "UOF": "Update of",
+					"SPIN": "Summary for patients in", "ORI": "Original report in"}
 	pubmed_url = 'https://www.ncbi.nlm.nih.gov/pubmed/'
 
 	Entrez.email = email
@@ -74,15 +74,15 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	df = pd.DataFrame.from_records(data)
 	df.rename(index=str, columns=dict_medline, inplace=True)
 	pub_type_list = ['Journal Article', 'Case Reports', 'Clinical Trial', 'Comparative Study', 'Letter',
-	                 'Meta-Analysis', 'Review']
+					 'Meta-Analysis', 'Review']
 	for pub_type in pub_type_list:
 		df[pub_type] = [pub_type in i for i in df['Publication Type'].values]
 	columns_to_keep = ['Abstract', 'Affiliation', 'Author', 'Date of Publication',
-	                   'Journal Title', 'MeSH Terms', 'Other Term',
-	                   'Other Term Owner', 'Place of Publication', 'PMID',
-	                   'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
-	                   'Journal Article', 'Case Reports', 'Clinical Trial',
-	                   'Comparative Study', 'Letter', 'Meta-Analysis', 'Review']
+					   'Journal Title', 'MeSH Terms', 'Other Term',
+					   'Other Term Owner', 'Place of Publication', 'PMID',
+					   'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
+					   'Journal Article', 'Case Reports', 'Clinical Trial',
+					   'Comparative Study', 'Letter', 'Meta-Analysis', 'Review']
 	for i in columns_to_keep:
 		if i not in df.columns:
 			df[i] = ''
@@ -139,7 +139,7 @@ def get_single_excel(target):
 	for uniprot_id in target.uniprot_ids:
 		if uniprot_id in list_of_entries.index:
 			output_name = Path(output_single_path).joinpath(target.symbol + '_' + uniprot_id + '.xlsx')
-			writer = pd.ExcelWriter(str(output_name),engine='xlsxwriter', options={'nan_inf_to_errors': True})
+			writer = pd.ExcelWriter(str(output_name), engine='xlsxwriter', options={'nan_inf_to_errors': True})
 
 			workbook = writer.book
 
@@ -148,7 +148,8 @@ def get_single_excel(target):
 			bold_center = workbook.add_format({'bold': True, 'valign': 'vcenter', 'align': 'center'})
 			red = workbook.add_format({'bold': True, 'valign': 'vcenter', 'color': 'red'})
 			green = workbook.add_format({'bold': True, 'valign': 'vcenter', 'color': 'green'})
-			col_header = workbook.add_format({'bold': True, 'bg_color': '#D9D9D9', 'align': 'center', 'valign': 'vcenter'})
+			col_header = workbook.add_format(
+				{'bold': True, 'bg_color': '#D9D9D9', 'align': 'center', 'valign': 'vcenter'})
 			vert_col_header = workbook.add_format(
 				{'bold': True, 'bg_color': '#D9D9D9', 'align': 'center', 'valign': 'bottom', 'rotation': 90})
 
@@ -190,7 +191,7 @@ def get_single_excel(target):
 
 			# =================== FILLING THE WORKSHEETS ========================#
 
-			# =============== GETTING OPENTARGETS + PUBMED DATAFRAMES ======================#
+			# =============== GETTING PUBMED DATAFRAMES ======================#
 			sequence = None
 			pubmed = pd.DataFrame(data=None)
 
@@ -288,7 +289,8 @@ def get_single_excel(target):
 						wb_disease.write(row, col, v)
 				wb_disease.conditional_format(1, 1, row, 1, {'type': 'data_bar'})
 				wb_disease.conditional_format(1, 2, row, 2,
-											  {'type': 'icon_set', 'reverse_icons': True, 'icon_style': '3_traffic_lights'})
+											  {'type': 'icon_set', 'reverse_icons': True,
+											   'icon_style': '3_traffic_lights'})
 
 			if not res['gwas'].empty:
 				for i in range(len(res['gwas'])):
@@ -354,7 +356,8 @@ def get_single_excel(target):
 							pass
 						else:
 							row += 2
-						wb_expression.merge_range(row, col, row, col + 3, res['tissue_expression'].iloc[i]['organ'].upper(),
+						wb_expression.merge_range(row, col, row, col + 3,
+												  res['tissue_expression'].iloc[i]['organ'].upper(),
 												  col_header)
 						row += 1
 						wb_expression.write(row, col, 'tissue name', col_header)
@@ -570,7 +573,8 @@ def get_single_excel(target):
 				pdb['% of full protein'] = round((pdb['n_residues'] / len(sequence)) * 100, 1)
 				pdb.operator = ' ' + pdb.operator
 				col_order = ['PDB_code', 'Technique', 'Resolution', 'Chain', 'Domain_name',
-							 'n_residues', '% of full protein', 'start_stop', 'type_of_binder', 'binding_type', 'operator',
+							 'n_residues', '% of full protein', 'start_stop', 'type_of_binder', 'binding_type',
+							 'operator',
 							 'value', 'units',
 							 'Ligand_name', 'publication_year', 'SITES_tractable', 'SITES_druggable']
 				pdb = pdb[col_order]
@@ -594,7 +598,8 @@ def get_single_excel(target):
 				col_order = ['PDB_code', 'druggability_score', 'pocket_score', 'pocket_number',
 							 'volume', 'area', 'fraction_apolar', 'gene', 'species', 'similarity']
 				res['alt_pockets'] = res['alt_pockets'][col_order]
-				res['alt_pockets'].to_excel(writer, sheet_name='Pockets', startrow=1, index=False, startcol=col_alt_pocket)
+				res['alt_pockets'].to_excel(writer, sheet_name='Pockets', startrow=1, index=False,
+											startcol=col_alt_pocket)
 				wb_pockets = writer.sheets['Pockets']
 				wb_pockets.merge_range(0, 0 + col_alt_pocket, 0, 9 + col_alt_pocket,
 									   'ALTERNATE DRUGGABLE POCKETS (PDB from blast)', col_header)
@@ -711,10 +716,13 @@ def get_single_excel(target):
 
 			if not res['bindingDB'].empty:
 				bdb = res['bindingDB'].copy()
-				columns = ['ZincID', 'IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)', 'pH', 'Temp',
-						   'Source', 'DOI', 'Patent_number', 'Institution', 'ligand_name', 'SMILES', 'HBA', 'HBD', 'LogD',
+				columns = ['ZincID', 'IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)', 'pH',
+						   'Temp',
+						   'Source', 'DOI', 'Patent_number', 'Institution', 'ligand_name', 'SMILES', 'HBA', 'HBD',
+						   'LogD',
 						   'LogP', 'MW', 'TPSA', 'aLogP', 'apKa', 'bpKa', 'nAr', 'pass_ro3', 'ro5_violations',
-						   'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class', 'class_def', 'max_phase',
+						   'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class', 'class_def',
+						   'max_phase',
 						   'oral']
 				bdb = bdb[((bdb[['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']] <= 10000) & (
 					bdb[['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']].notna())).any(axis=1)]
@@ -749,7 +757,7 @@ def get_single_excel(target):
 
 			# ======================== CLOSING FILE ==================================#
 			workbook.close()
-			print('[FILE]: File for ',target.symbol,' generated [',output_name,']')
+			print('[FILE]: File for ', target.symbol, ' generated [', output_name, ']')
 		else:
 			return print("Gene named ", target.symbol, " with ID [", uniprot_id,
 						 '] not present in the database. Run the druggability_DB command to run the analysis on it')
@@ -765,8 +773,13 @@ def get_list_excel(list_targets):
 		pubmed = {'Target_id': [], 'total # publications': [], 'number of Dementia publications': []}
 		for gene_symbol in list_targets.index:
 			pubmed['Target_id'].extend(list_targets.uniprot_ids.loc[gene_symbol])
-			pubmed['number of Dementia publications'].extend([pubmed_search(list_targets.symbol.loc[gene_symbol], pubmed_email, return_number=True, mesh_term='Dementia')]*len(list_targets.uniprot_ids.loc[gene_symbol]))
-			pubmed['total # publications'].extend([pubmed_search(list_targets.symbol.loc[gene_symbol], pubmed_email, return_number=True)]*len(list_targets.uniprot_ids.loc[gene_symbol]))
+			pubmed['number of Dementia publications'].extend([pubmed_search(list_targets.symbol.loc[gene_symbol],
+																			pubmed_email, return_number=True,
+																			mesh_term='Dementia')] * len(
+				list_targets.uniprot_ids.loc[gene_symbol]))
+			pubmed['total # publications'].extend(
+				[pubmed_search(list_targets.symbol.loc[gene_symbol], pubmed_email, return_number=True)] * len(
+					list_targets.uniprot_ids.loc[gene_symbol]))
 		# TODO: Mesh term is hard-coded here
 		pubmed = pd.DataFrame.from_dict(pubmed)
 	else:
@@ -780,21 +793,73 @@ def get_list_excel(list_targets):
 	list_done = data.Target_id.values.tolist()
 
 	for gene_symbol in list_targets.index:
-		if list_targets.uniprot_ids.loc[gene_symbol] not in list_done:
-			not_in_db['Not present in DB'].append(gene_symbol)
+		for tid in list_targets.uniprot_ids.loc[gene_symbol]:
+			if tid not in list_done:
+				not_in_db['Not present in DB'].append(list_targets.symbol.loc[gene_symbol])
 	not_in_db = pd.DataFrame.from_dict(not_in_db)
 
 	t = time.strftime("%d%b%Y_%H%M%S")
 	output_file_name = Path(output_lists_path).joinpath('Export_' + str(len(data)) + '_entries_' + t + '.xlsx')
 
-	writer = pd.ExcelWriter(str(output_file_name),engine='xlsxwriter')
-
+	writer = pd.ExcelWriter(str(output_file_name), engine='xlsxwriter')
 	workbook = writer.book
-	vert_col_header = workbook.add_format({'bold': True, 'bg_color': '#D9D9D9', 'align': 'center', 'valign': 'bottom', 'rotation': 90})
 
-	data.to_excel(writer,sheet_name='Druggability_list', index=False)
-	for col_num,value in enumerate(data.columns.values):
-		writer.sheets['Druggability_list'].write(0,col_num,value,vert_col_header)
+	col_order = ["Target_id", "Gene_name", "Pharos_class", "protein_family", "protein_family_detail", "Number_isoforms",
+				 "EBI Total Patent Count", "JensenLab PubMed Score", "NCBI Gene PubMed Count", "PubTator Score",
+				 "total_patent_count", "year_max_patents", "count_patents_max_year", "novelty_score",
+				 "total # publications", "number of Dementia publications", "Brain", "Endocrine_tissue",
+				 "Female_tissue", "Immune", "Kidney", "Liver_gallbladder", "Lung", "Male_tissue", "Muscle_tissue",
+				 "Pancreas", "Skin", "Soft_tissue", "gitract", "Expression_Selectivity", "tissue_max_expression",
+				 "expression_max_tissue", "variants_count", "mutants_count", "gwas_count",
+				 "phenotypes_heterozygotes_lethal_count", "phenotypes_homozygotes_lethal_count",
+				 "phenotypes_heterozygotes_normal_count", "phenotypes_homozygotes_normal_count", "Ab Count",
+				 "MAb Count", "kegg_list", "kegg_count", "reactome_list", "reactome_count", "disease_count_uniprot",
+				 "disease_list_tcrd", "disease_count_tcrd", "max_disease_score", "name_max_disease",
+				 "OT_number_of_associations", "OT_number_of_disease_areas", "OT_list_max_disease_area",
+				 "OT_max_association_diseaseArea_score", "OT_list_max_diseases", "OT_TOP10_diseases",
+				 "OT_max_association_score", "OT_%_genetic_association", "OT_%_known_drug", "OT_%_litterature_mining",
+				 "OT_%_animal_model", "OT_%_affected_pathway", "OT_%_rna_expression", "OT_%_somatic_mutation",
+				 "OT_MAX_VAL_genetic_association", "OT_NUM_MAX_genetic_association", "OT_MAX_VAL_known_drug",
+				 "OT_NUM_MAX_known_drug", "OT_MAX_VAL_litterature_mining", "OT_NUM_MAX_litterature_mining",
+				 "OT_MAX_VAL_animal_model", "OT_NUM_MAX_animal_model", "OT_MAX_VAL_affected_pathway",
+				 "OT_NUM_MAX_affected_pathway", "OT_MAX_VAL_rna_expression", "OT_NUM_MAX_rna_expression",
+				 "OT_MAX_VAL_somatic_mutation", "OT_NUM_MAX_somatic_mutation", "PDB_total_count",
+				 "PDB_with_Ligand_count", "PDB_sites_tractable_count", "PDB_sites_druggable_count",
+				 "PDB_blast_close_count", "PDB_blast_max_similarity", "domains_count", "domain_tractable",
+				 "domain_druggable", "mean_druggability_score", "stddev_druggability_score", "mean_area", "mean_volume",
+				 "mean_fraction_apolar", "mean_pocket_score", "pdb_with_druggable_pocket", "druggable_pockets_total",
+				 "mean_alt_druggability_score", "alt_stddev_druggability_score", "mean_alt_area", "mean_alt_volume",
+				 "mean_alt_fraction_apolar", "mean_alt_pocket_score", "mean_alt_similarity", "max_alt_similarity",
+				 "alt_pdb_with_druggable_pocket", "alt_druggable_pockets_total", "BindingDB_count",
+				 "BindingDB_potent_count", "BindingDB_potent_phase2_count", "ChEMBL_bioactives_count",
+				 "ChEMBL_bioactives_potent_count", "ChEMBL_bioactives_moderate_selectivity_count",
+				 "ChEMBL_bioactives_good_selectivity_count", "ChEMBL_bioactives_great_selectivity_count",
+				 "commercial_total", "commercial_potent_total"]
+
+	data = data[col_order]
+	data.to_excel(writer, sheet_name='Druggability_list', index=False,startrow=1)
+
+	header_groups = {'GENERAL INFO': (0, 5), 'LITTERATURE/PATENT INFORMATION': (6, 15), 'BIOLOGY': (16, 40),
+					 'PATHWAYS AND DISEASES': (41, 77), 'STRUCTURAL INFORMATION': (78, 104), 'CHEMISTRY': (105, 114)}
+	color_dict = {'GENERAL INFO': '#fde9d9', 'LITTERATURE/PATENT INFORMATION': '#d9d9d9', 'BIOLOGY': '#ebf1de',
+				  'PATHWAYS AND DISEASES': '#f2dcdb', 'STRUCTURAL INFORMATION': '#dce6f1', 'CHEMISTRY': '#e4dfec'}
+	for head, span in header_groups.items():
+		col_header = workbook.add_format(
+			{'bold': True, 'bg_color': color_dict[head], 'align': 'center', 'valign': 'vcenter'})
+		if span[0] == span[1]:
+			writer.sheets['Druggability_list'].write(0, span[0], head, col_header)
+		else:
+			writer.sheets['Druggability_list'].merge_range(0, span[0], 0, span[1], head, col_header)
+
+	for col_num, value in enumerate(data.columns.values):
+		vert_col_header = workbook.add_format(
+			{'bold': True, 'bg_color': '#d9d9d9', 'align': 'center', 'valign': 'bottom', 'rotation': 90})
+		for head, span in header_groups.items():
+			if span[0] <= col_num <= span[1]:
+				vert_col_header = workbook.add_format(
+					{'bold': True, 'bg_color': color_dict[head], 'align': 'center', 'valign': 'bottom', 'rotation': 90})
+				break
+		writer.sheets['Druggability_list'].write(1, col_num, value, vert_col_header)
 
 	not_in_db.to_excel(writer, 'Not in DB', index=False)
 	writer.save()
@@ -806,25 +871,25 @@ def parse_args():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-g', '--gene', help='enter a single gene name', metavar='')
 	parser.add_argument('-i', '--in_file',
-	                    help='Name of the input file with a list of genes (.txt - 1 gene per line)',
-	                    metavar='')
+						help='Name of the input file with a list of genes (.txt - 1 gene per line)',
+						metavar='')
 	parser.add_argument('-l', '--list_genes', help='Enter a list of gene name separated by a ","', metavar='')
 
 	parser.add_argument('-v', '--verbose', help="Print information", action='store_true', default=False)
 
 	parser.add_argument('-rl', '--report_list',
-	                    help="produce an output file at the end of the analysis with a list "
-	                         "of genes entered", action='store_true',
-	                    default=False)
+						help="produce an output file at the end of the analysis with a list "
+							 "of genes entered", action='store_true',
+						default=False)
 	parser.add_argument('-rs', '--report_single',
-	                    help="produce an output file for each target listed (more detailed "
-	                         "information available) Caution : 1 File created per target",
-	                    action='store_true',
-	                    default=False)
+						help="produce an output file for each target listed (more detailed "
+							 "information available) Caution : 1 File created per target",
+						action='store_true',
+						default=False)
 	parser.add_argument('-update_config', '--update_config',
-	                    help="use this if you want to update the config file",
-	                    action='store_true',
-	                    default=False)
+						help="use this if you want to update the config file",
+						action='store_true',
+						default=False)
 	args = parser.parse_args()
 	if not args.gene and not args.in_file and not args.list_genes:
 		print('Please use one of the optional input options :')
@@ -838,7 +903,7 @@ def parse_args():
 
 
 def main():
-	global output_lists_path,output_single_path,targetDB,pubmed_email,list_of_entries
+	global output_lists_path, output_single_path, targetDB, pubmed_email, list_of_entries
 	args = parse_args()
 	update_config = args.update_config
 	while True:
@@ -875,7 +940,7 @@ def main():
 				pubmed_email = config['pubmed_email']['email']
 				break
 		else:
-			config = cf.get_config_from_user(config, todo=['list', 'single', 'targetdb', 'email'],new=True)
+			config = cf.get_config_from_user(config, todo=['list', 'single', 'targetdb', 'email'], new=True)
 			with config_file_path.open(mode='w') as cfile:
 				config.write(cfile)
 			update_config = False
@@ -914,4 +979,3 @@ def entry_point():
 
 if __name__ == "__main__":
 	entry_point()
-

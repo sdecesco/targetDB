@@ -497,7 +497,6 @@ def get_descriptors(target_id, targetdb=None):
 	data['commercials_total'] = len(results['commercials'])
 	data['commercials_potent_total'] = len(results['commercials'][results['commercials']['affinity_value'] <= 100])
 
-
 	query_id = """SELECT tcrd_id FROM tcrd_id WHERE Target_id= '%s'""" % target_id
 	tcrd_id = pd.read_sql(query_id, con=connector_targetDB)
 	if tcrd_id.empty:
@@ -675,8 +674,7 @@ def get_descriptors_list(target_id, targetdb=None):
 		ON Domain.Domain_id=D.domain_id
 	WHERE F.Target_id in ('{target}')
 	AND F.druggable='TRUE' AND F.blast='FALSE'
-	GROUP BY F.Target_id,F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(
-						target=target_id),
+	GROUP BY F.Target_id,F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(target=target_id),
 					'alt_pockets': """SELECT F.Target_id,
 	  F.PDB_code,
 	  F.DrugScore as alt_druggability_score,
@@ -800,9 +798,10 @@ def get_descriptors_list(target_id, targetdb=None):
 						WHERE target_id in ('%s')) T
 					LEFT JOIN drugEbility_domains
 					ON pdb_code = T.pdb_codes
-					GROUP BY Target_id""" % target_id}
-	results = {qname: pd.read_sql(query, con=connector_targetDB) for qname, query in list_queries.items()}
+					GROUP BY Target_id""" % target_id,
+					'opentargets':"""SELECT * FROM opentarget_association WHERE target_id in ('%s')"""%target_id}
 
+	results = {qname: pd.read_sql(query, con=connector_targetDB) for qname, query in list_queries.items()}
 
 	data = results['gen_info'].drop(['Species', 'species_id', 'Sequence',
 									 'Cell_location', 'Process', 'Function', 'Synonyms',
@@ -823,8 +822,86 @@ def get_descriptors_list(target_id, targetdb=None):
 
 	data = data.merge(results['disease'].groupby('Target_id')['disease_id'].count().reset_index().rename(
 		columns={'disease_id': 'disease_count_uniprot'}), on='Target_id', how='left')
+
+	OT_diseases = results['opentargets'][(results['opentargets']['disease_area'] != '')]
+	OT_n_associations = OT_diseases.groupby('target_id')['disease_area'].count().reset_index().rename(
+		columns={'target_id': 'Target_id', 'disease_area': 'OT_number_of_associations'})
+	OT_disease_max = OT_diseases.loc[OT_diseases.groupby('target_id').idxmax().overall_score][
+		['target_id', 'overall_score']].rename(
+		columns={'target_id': 'Target_id', 'overall_score': 'OT_max_association_score'})
+	OT_max_disease_list = OT_diseases.groupby('target_id').apply(
+		lambda x: x[x.overall_score == x.overall_score.max()]['disease_name']).reset_index().groupby('target_id')[
+		'disease_name'].apply(','.join).reset_index().rename(
+		columns={'target_id': 'Target_id', 'disease_name': 'OT_list_max_diseases'})
+	OT_disease_association_type_proportion = OT_diseases.groupby('target_id').apply(
+		lambda x: x[x != 0].count() / x[x != 0]['target_id'].count()).drop(
+		['target_id', 'disease_area', 'disease_name', 'overall_score'], axis=1).reset_index().rename(
+		columns={'target_id': 'Target_id',
+				 'genetic_association': 'OT_%_genetic_association', 'known_drug': 'OT_%_known_drug',
+				 'litterature_mining': 'OT_%_litterature_mining',
+				 'animal_model': 'OT_%_animal_model', 'affected_pathway': 'OT_%_affected_pathway',
+				 'rna_expression': 'OT_%_rna_expression',
+				 'somatic_mutation': 'OT_%_somatic_mutation'}).round(2)
+	OT_diseases_associations_max_count = OT_diseases.groupby('target_id').apply(
+		lambda x: x[(x == x.max()) & (x != 0)].count()).drop(
+		['target_id', 'disease_area', 'disease_name', 'overall_score'], axis=1).reset_index().rename(
+		columns={'target_id': 'Target_id',
+				 'genetic_association': 'OT_NUM_MAX_genetic_association', 'known_drug': 'OT_NUM_MAX_known_drug',
+				 'litterature_mining': 'OT_NUM_MAX_litterature_mining',
+				 'animal_model': 'OT_NUM_MAX_animal_model', 'affected_pathway': 'OT_NUM_MAX_affected_pathway',
+				 'rna_expression': 'OT_NUM_MAX_rna_expression',
+				 'somatic_mutation': 'OT_NUM_MAX_somatic_mutation'})
+	OT_diseases_associations_max_val = OT_diseases.groupby('target_id').max().drop(
+		['disease_area', 'disease_name', 'overall_score'], axis=1).reset_index().rename(
+		columns={'target_id': 'Target_id',
+				 'genetic_association': 'OT_MAX_VAL_genetic_association', 'known_drug': 'OT_MAX_VAL_known_drug',
+				 'litterature_mining': 'OT_MAX_VAL_litterature_mining',
+				 'animal_model': 'OT_MAX_VAL_animal_model', 'affected_pathway': 'OT_MAX_VAL_affected_pathway',
+				 'rna_expression': 'OT_MAX_VAL_rna_expression',
+				 'somatic_mutation': 'OT_MAX_VAL_somatic_mutation'})
+	OT_top10 = OT_diseases.groupby('target_id').apply(lambda x: x.loc[x.overall_score.nlargest(10).index])
+	OT_top10 = OT_top10[OT_top10.overall_score >= 0.1]
+	OT_top10 = OT_top10['disease_name'].reset_index().groupby('target_id')['disease_name'].apply(
+		','.join).reset_index().rename(columns={'target_id': 'Target_id', 'disease_name': 'OT_TOP10_diseases'})
+
+	OT_disease_areas = results['opentargets'][(results['opentargets']['disease_area'] == '')]
+	OT_n_disease_areas = OT_disease_areas.groupby('target_id')['disease_area'].count().reset_index().rename(
+		columns={'target_id': 'Target_id', 'disease_area': 'OT_number_of_disease_areas'})
+	OT_disease_area_max = OT_disease_areas.loc[OT_disease_areas.groupby('target_id').idxmax().overall_score][
+		['target_id', 'overall_score']].rename(
+		columns={'target_id': 'Target_id', 'overall_score': 'OT_max_association_diseaseArea_score'})
+	OT_max_disease_area_list = OT_disease_areas.groupby('target_id').apply(
+		lambda x: x[x.overall_score == x.overall_score.max()]['disease_name']).reset_index().groupby('target_id')[
+		'disease_name'].apply(','.join).reset_index().rename(
+		columns={'target_id': 'Target_id', 'disease_name': 'OT_list_max_disease_area'})
+
+	OT = OT_n_associations
+	OT = OT.merge(OT_disease_max, on='Target_id', how='left')
+	OT = OT.merge(OT_max_disease_list, on='Target_id', how='left')
+	OT = OT.merge(OT_disease_association_type_proportion, on='Target_id', how='left')
+	OT = OT.merge(OT_diseases_associations_max_count, on='Target_id', how='left')
+	OT = OT.merge(OT_diseases_associations_max_val, on='Target_id', how='left')
+	OT = OT.merge(OT_n_disease_areas, on='Target_id', how='left')
+	OT = OT.merge(OT_disease_area_max, on='Target_id', how='left')
+	OT = OT.merge(OT_max_disease_area_list, on='Target_id', how='left')
+	OT = OT.merge(OT_top10, on='Target_id', how='left')
+	col_order = ["Target_id", "OT_number_of_associations", "OT_number_of_disease_areas", "OT_list_max_disease_area",
+				 "OT_max_association_diseaseArea_score", "OT_list_max_diseases", "OT_TOP10_diseases",
+				 "OT_max_association_score", "OT_%_genetic_association", "OT_%_known_drug", "OT_%_litterature_mining",
+				 "OT_%_animal_model", "OT_%_affected_pathway", "OT_%_rna_expression", "OT_%_somatic_mutation",
+				 "OT_MAX_VAL_genetic_association", "OT_NUM_MAX_genetic_association", "OT_MAX_VAL_known_drug",
+				 "OT_NUM_MAX_known_drug", "OT_MAX_VAL_litterature_mining", "OT_NUM_MAX_litterature_mining",
+				 "OT_MAX_VAL_animal_model", "OT_NUM_MAX_animal_model", "OT_MAX_VAL_affected_pathway",
+				 "OT_NUM_MAX_affected_pathway", "OT_MAX_VAL_rna_expression", "OT_NUM_MAX_rna_expression",
+				 "OT_MAX_VAL_somatic_mutation", "OT_NUM_MAX_somatic_mutation"]
+	OT = OT[col_order]
+
+	data = data.merge(OT,on='Target_id', how='left')
+
+
 	if not results['pockets'].empty:
-		data = data.merge(results['pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index().round(2), on='Target_id',
+		data = data.merge(results['pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index().round(2),
+						  on='Target_id',
 						  how='left')
 		data = data.merge(results['pockets'].groupby('Target_id')['druggability_score'].std().reset_index().rename(
 			columns={'druggability_score': 'stddev_druggability_score'}).round(2), on='Target_id', how='left')
@@ -836,8 +913,10 @@ def get_descriptors_list(target_id, targetdb=None):
 		data = data.merge(results['alt_pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index().round(2),
 						  on='Target_id',
 						  how='left')
-		data = data.merge(results['alt_pockets'].groupby('Target_id')['alt_druggability_score'].std().reset_index().rename(
-			columns={'alt_druggability_score': 'alt_stddev_druggability_score'}).round(2), on='Target_id', how='left')
+		data = data.merge(
+			results['alt_pockets'].groupby('Target_id')['alt_druggability_score'].std().reset_index().rename(
+				columns={'alt_druggability_score': 'alt_stddev_druggability_score'}).round(2), on='Target_id',
+			how='left')
 	data = data.merge(results['alt_pockets'].groupby('Target_id')['alt_similarity'].max().reset_index().rename(
 		columns={'alt_similarity': 'max_alt_similarity'}), on='Target_id', how='left')
 
@@ -861,10 +940,12 @@ def get_descriptors_list(target_id, targetdb=None):
 			['Target_id', 'organ']).mean().round(1).reset_index()
 		tissue = tissue_grouped.pivot(index='Target_id', columns='organ', values='value').reset_index()
 		tissue_max = tissue_grouped.loc[tissue_grouped.groupby('Target_id').idxmax()['value']].rename(
-				columns={'organ': 'tissue_max_expression', 'value': 'expression_max_tissue'})
+			columns={'organ': 'tissue_max_expression', 'value': 'expression_max_tissue'})
 	else:
-		tissue = pd.DataFrame(columns=['Target_id','Brain','Endocrine_tissue','Female_tissue','Immune','Kidney','Liver_gallbladder','Lung','Male_tissue','Muscle_tissue','Pancreas','Skin','Soft_tissue','gitract'])
-		tissue_max = pd.DataFrame(columns=['tissue_max_expression','expression_max_tissue','Target_id'])
+		tissue = pd.DataFrame(
+			columns=['Target_id', 'Brain', 'Endocrine_tissue', 'Female_tissue', 'Immune', 'Kidney', 'Liver_gallbladder',
+					 'Lung', 'Male_tissue', 'Muscle_tissue', 'Pancreas', 'Skin', 'Soft_tissue', 'gitract'])
+		tissue_max = pd.DataFrame(columns=['tissue_max_expression', 'expression_max_tissue', 'Target_id'])
 
 	data = data.merge(tissue, on='Target_id', how='left')
 	data = data.merge(results['selectivity'].round(2).rename(columns={'Selectivity_entropy': 'Expression_Selectivity'}),
@@ -930,15 +1011,17 @@ def get_descriptors_list(target_id, targetdb=None):
 
 			total_moderate_selectivity = best[
 				(best['Selectivity'] <= 2) & (best['best_target_id'] == best['chembl_target_id']) & (
-							best['number of other targets'] > 1)].groupby(
+						best['number of other targets'] > 1)].groupby(
 				'Target_id')['lig_id'].nunique().reset_index().rename(
 				columns={'lig_id': 'ChEMBL_bioactives_moderate_selectivity_count'})
-			total_good_selectivity = best[(best['Selectivity'] <= 1.5) & (best['best_target_id'] == best['chembl_target_id']) & (
-					best['number of other targets'] > 1)].groupby('Target_id')['lig_id'].nunique().reset_index().rename(
-				columns={'lig_id': 'ChEMBL_bioactives_good_selectivity_count'})
+			total_good_selectivity = \
+				best[(best['Selectivity'] <= 1.5) & (best['best_target_id'] == best['chembl_target_id']) & (
+						best['number of other targets'] > 1)].groupby('Target_id')[
+					'lig_id'].nunique().reset_index().rename(
+					columns={'lig_id': 'ChEMBL_bioactives_good_selectivity_count'})
 			total_great_selectivity = best[
 				(best['Selectivity'] <= 1) & (best['best_target_id'] == best['chembl_target_id']) & (
-							best['number of other targets'] > 1)].groupby(
+						best['number of other targets'] > 1)].groupby(
 				'Target_id')['lig_id'].nunique().reset_index().rename(
 				columns={'lig_id': 'ChEMBL_bioactives_great_selectivity_count'})
 		else:
@@ -1016,28 +1099,26 @@ def get_descriptors_list(target_id, targetdb=None):
 		'smiles'].count().reset_index().rename(
 		columns={'smiles': 'commercial_potent_total', 'target_id': 'Target_id'}), on='Target_id', how='left')
 
-
 	query_id = """SELECT * FROM tcrd_id WHERE Target_id in ('%s')""" % target_id
 	tcrd_id = pd.read_sql(query_id, con=connector_targetDB)
 	tcrd_id_list = "','".join([str(i) for i in tcrd_id['tcrd_id'].values.tolist()])
 
-
 	tcrd_queries = {'target': """SELECT * FROM tcrd_target WHERE tcrd_id in ('%s') """ % tcrd_id_list,
-				'tdl_info': """SELECT * FROM tcrd_info WHERE protein_id in ('%s')""" % tcrd_id_list,
-				'patent': """SELECT * FROM tcrd_patent where protein_id in ('%s')""" % tcrd_id_list,
-				'disease': """SELECT protein_id,disease_id,doid,score,name,parent
+					'tdl_info': """SELECT * FROM tcrd_info WHERE protein_id in ('%s')""" % tcrd_id_list,
+					'patent': """SELECT * FROM tcrd_patent where protein_id in ('%s')""" % tcrd_id_list,
+					'disease': """SELECT protein_id,disease_id,doid,score,name,parent
 					FROM
 					tcrd_disease
 	WHERE protein_id in ('%s')
 	ORDER BY score DESC""" % tcrd_id_list,
-				'novelty': """SELECT score,protein_id as tcrd_id FROM tcrd_novelty WHERE protein_id in ('%s')""" % tcrd_id_list}
+					'novelty': """SELECT score,protein_id as tcrd_id FROM tcrd_novelty WHERE protein_id in ('%s')""" % tcrd_id_list}
 	tcrd_res = {qname: pd.read_sql(query, con=connector_targetDB) for qname, query in tcrd_queries.items()}
 
 	tcrd_data = tcrd_id.copy()
 
 	tcrd_data = tcrd_data.merge(tcrd_res['target'], on='tcrd_id', how='left')
 
-	tcrd_res['tdl_info'].rename(columns={'protein_id': 'tcrd_id'},inplace=True)
+	tcrd_res['tdl_info'].rename(columns={'protein_id': 'tcrd_id'}, inplace=True)
 	tcrd_res['tdl_info'] = tcrd_res['tdl_info'].round(2)
 
 	tcrd_data = tcrd_data.merge(tcrd_res['tdl_info'], on='tcrd_id', how='left')
@@ -1046,11 +1127,13 @@ def get_descriptors_list(target_id, targetdb=None):
 		columns={'count': 'total_patent_count', 'protein_id': 'tcrd_id'}), on='tcrd_id', how='left')
 	tcrd_data = tcrd_data.merge(
 		tcrd_res['patent'].iloc[tcrd_res['patent'].groupby('protein_id')['count'].idxmax()].rename(
-			columns={'protein_id': 'tcrd_id', 'year': 'year_max_patents', 'count': 'count_patents_max_year'}), on='tcrd_id',
+			columns={'protein_id': 'tcrd_id', 'year': 'year_max_patents', 'count': 'count_patents_max_year'}),
+		on='tcrd_id',
 		how='left')
 
 	disease_clean = tcrd_res['disease'][
-		(tcrd_res['disease']['score'] > 1) & (~tcrd_res['disease']['doid'].isin(tcrd_res['disease']['parent'].unique()))]
+		(tcrd_res['disease']['score'] > 1) & (
+			~tcrd_res['disease']['doid'].isin(tcrd_res['disease']['parent'].unique()))]
 	disease_list = disease_clean.groupby('protein_id')['name'].unique().apply('\n'.join).reset_index().rename(
 		columns={'protein_id': 'tcrd_id', 'name': 'disease_list_tcrd'})
 	disease_count = disease_clean.groupby('protein_id')['name'].nunique().reset_index().rename(
@@ -1063,10 +1146,11 @@ def get_descriptors_list(target_id, targetdb=None):
 	tcrd_data = tcrd_data.merge(disease_count, on='tcrd_id', how='left')
 	tcrd_data = tcrd_data.merge(disease_max, on='tcrd_id', how='left')
 
-	tcrd_data = tcrd_data.merge(tcrd_res['novelty'].rename(columns={'score': 'novelty_score'}), on='tcrd_id', how='left')
+	tcrd_data = tcrd_data.merge(tcrd_res['novelty'].rename(columns={'score': 'novelty_score'}), on='tcrd_id',
+								how='left')
 	tcrd_data = tcrd_data.drop(['tcrd_id'], axis=1)
 
-	data = data.merge(tcrd_data, on='Target_id',how='left')
+	data = data.merge(tcrd_data, on='Target_id', how='left')
 	connector_targetDB.close()
 	return data
 
