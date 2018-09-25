@@ -244,7 +244,7 @@ def get_single_excel(target):
                         else:
                             col = col + 1
                             wb_general_info.write(row, col, v, v_center)
-                target_desc = td.get_descriptors_list(uniprot_id, targetdb=targetDB)
+                target_desc = td.get_descriptors_list(uniprot_id, targetdb=targetDB,mode='single')
                 score_col = ['structure_info_score', 'structural_drug_score', 'chemistry_score', 'biology_score',
                              'disease_score', 'genetic_score', 'information_score', 'safety_score']
                 target_score = target_desc[score_col] * 10

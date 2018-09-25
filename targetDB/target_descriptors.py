@@ -33,44 +33,43 @@ class StdevFunc:
 
 class get_mpo_coeff:
     def __init__(self, master):
+        headers = ['Structural\ninformation','Structural\nDruggability','Chemistry','Biology','Diseases\nLinks','Genetic\nLinks','Literature\nInformation','Safety']
+        colors = ['#95d0fc', '#0485d1', '#b790d4', '#87ae73', '#fec615', '#fb7d07', '#95a3a6', '#ff474c']
         self.master = master
         Label(self.master, height=2, text='Please input the desired weigth for the MPO score component',
-              font='bold').pack()
-        self.structural_info = Scale(self.master, from_=0, to=100, orient=HORIZONTAL, length=600, tickinterval=10,
-                                     label='Structural Information', bg='#95d0fc', font='bold')
+              font='bold').grid(row=0,columnspan=8)
+        for i in range(len(headers)):
+            Label(self.master, height=2, text=headers[i],font='bold',bg=colors[i]).grid(row=2,column=i,sticky=W+E)
+        Button(self.master, text='Validate', command=self.get_values, height=2, width=60, fg='red', bg='white').grid(columnspan=8,row=1)
+        self.structural_info = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#95d0fc', font='bold')
         self.structural_info.set(50)
-        self.structural_info.pack()
-        self.structural_drug = Scale(self.master, from_=0, to=100, orient=HORIZONTAL, length=600, tickinterval=10,
-                                     label='Structural Druggability', bg='#0485d1', font='bold', fg='white')
+        self.structural_info.grid(row=3,column=0,sticky=W+E)
+        self.structural_drug = Scale(self.master, from_=100, to=0,orient=VERTICAL, length=300, tickinterval=10, bg='#0485d1', font='bold', fg='white')
         self.structural_drug.set(50)
-        self.structural_drug.pack()
-        self.chemistry = Scale(self.master, from_=0, to=100, orient=HORIZONTAL, length=600, tickinterval=10,
-                               label='Chemistry', bg='#b790d4', font='bold')
+        self.structural_drug.grid(row=3,column=1,sticky=W+E)
+        self.chemistry = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#b790d4', font='bold')
         self.chemistry.set(50)
-        self.chemistry.pack()
-        self.biology = Scale(self.master, from_=0, to=100, orient=HORIZONTAL, length=600, tickinterval=10,
-                             label='Biology', bg='#87ae73', font='bold')
+        self.chemistry.grid(row=3,column=2,sticky=W+E)
+        self.biology = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#87ae73', font='bold')
         self.biology.set(50)
-        self.biology.pack()
-        self.disease = Scale(self.master, from_=0, to=100, orient=HORIZONTAL, length=600, tickinterval=10,
-                             label='Diseases Links', bg='#fec615', font='bold')
+        self.biology.grid(row=3,column=3,sticky=W+E)
+        self.disease = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#fec615', font='bold')
         self.disease.set(50)
-        self.disease.pack()
-        self.genetic = Scale(self.master, from_=0, to=100, orient=HORIZONTAL, length=600, tickinterval=10,
-                             label='Genetic Links', bg='#fb7d07', font='bold')
+        self.disease.grid(row=3,column=4,sticky=W+E)
+        self.genetic = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#fb7d07', font='bold')
         self.genetic.set(50)
-        self.genetic.pack()
-        self.information = Scale(self.master, from_=0, to=100, orient=HORIZONTAL, length=600, tickinterval=10,
-                                 label='Literature/Information', bg='#95a3a6', font='bold', fg='white')
+        self.genetic.grid(row=3,column=5,sticky=W+E)
+        self.information = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#95a3a6', font='bold', fg='white')
         self.information.set(50)
-        self.information.pack()
-        self.safety = Scale(self.master, from_=0, to=100, orient=HORIZONTAL, length=600, tickinterval=10,
-                            label='Safety', bg='#ff474c', font='bold', fg='white')
+        self.information.grid(row=3,column=6,sticky=W+E)
+        self.safety = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#ff474c', font='bold', fg='white')
         self.safety.set(50)
-        self.safety.pack()
-        LabelFrame(self.master, height=50).pack()
-        Button(self.master, text='Validate', command=self.get_values, height=2, width=60, fg='red', bg='white').pack()
-        LabelFrame(self.master, height=50).pack()
+        self.safety.grid(row=3,column=7,sticky=W+E)
+
+
+        # LabelFrame(self.master, height=50).grid(row=3,column=0)
+        # Button(self.master, text='Validate', command=self.get_values, height=2, width=60, fg='red', bg='white').pack()
+        # LabelFrame(self.master, height=50).pack()
 
     def get_values(self):
         self.coeff = {'sbio': self.structural_info.get() / 100, 'sdrug': self.structural_drug.get() / 100,
@@ -624,7 +623,7 @@ def get_descriptors(target_id, targetdb=None):
     return data
 
 
-def get_descriptors_list(target_id, targetdb=None):
+def get_descriptors_list(target_id, targetdb=None,mode='list'):
     connector_targetDB = sqlite3.connect(targetdb)
     connector_targetDB.create_aggregate('stddev', 1, StdevFunc)
     list_queries = {'gen_info': """SELECT * FROM Targets WHERE Target_id in ('%s')""" % target_id,
@@ -1308,7 +1307,7 @@ def get_descriptors_list(target_id, targetdb=None):
             pdb_range.loc[tid, ['%_domain_covered']] = sum(domain_coverages) / len(
                 domain_range.loc[tid]['ranges'])
         pdb_range.loc[tid, ['n_length']] = n_residues
-        pdb_range.loc[tid, ['%_sequence_covered']] = n_residues / general_data.loc[tid].length
+        pdb_range.loc[tid, ['%_sequence_covered']] = np.where((n_residues / general_data.loc[tid].length)>1,1,n_residues / general_data.loc[tid].length)
     pdb_range = pdb_range.drop(['start_stop', 'n_length'], axis=1)
     pdb_range.reset_index(drop=True, inplace=True)
 
@@ -1405,9 +1404,9 @@ def get_descriptors_list(target_id, targetdb=None):
     structural_info_cols = ["Target_id", "PDB_total_count", '%_sequence_covered', '%_domain_covered',
                             "PDB_blast_close_count", "PDB_blast_max_similarity"]
     structural_info_df = data[structural_info_cols].copy()
-    structural_info_df['pdb_count_score'] = structural_info_df.PDB_total_count >= 3
-    structural_info_df['pdb_alt_count_score'] = (structural_info_df.PDB_blast_close_count * (
-            structural_info_df.PDB_blast_max_similarity / 100)) / 2 >= 3
+    structural_info_df['pdb_count_score'] = np.where(structural_info_df.PDB_total_count >= 3,1,0)
+    structural_info_df['pdb_alt_count_score'] = np.where(((structural_info_df.PDB_blast_close_count * (
+            structural_info_df.PDB_blast_max_similarity / 100)) / 2) >= 3,1,0)
     structural_info_df['structure_info_score'] = structural_info_df[
         ['%_sequence_covered', '%_domain_covered', 'pdb_count_score', 'pdb_alt_count_score']].mean(axis=1)
 
@@ -1537,14 +1536,21 @@ def get_descriptors_list(target_id, targetdb=None):
     # ==================================== MPO SCORE ===============================================#
     # ==============================================================================================#
 
-    window = Tk()
-    values = get_mpo_coeff(window)
-    window.mainloop()
+    if mode =='list':
+        window = Tk()
+        values = get_mpo_coeff(window)
+        window.mainloop()
 
-    coeff_df = values.coeff
+        coeff_df = values.coeff
 
-    scores[
-        'mpo_score'] = (scores.safety_score * coeff_df['safe'] + scores.information_score * coeff_df['info'] + scores.genetic_score * coeff_df['gen'] + scores.disease_score * coeff_df['dise'] + scores.biology_score * coeff_df['bio'] + scores.chemistry_score * coeff_df['chem'] + scores.structural_drug_score * coeff_df['sdrug'] + scores.structure_info_score * coeff_df['sbio'])/8
+        scores[
+            'mpo_score'] = (scores.safety_score * coeff_df['safe'] + scores.information_score * coeff_df[
+            'info'] + scores.genetic_score * coeff_df['gen'] + scores.disease_score * coeff_df[
+                                'dise'] + scores.biology_score * coeff_df['bio'] + scores.chemistry_score * coeff_df[
+                                'chem'] + scores.structural_drug_score * coeff_df[
+                                'sdrug'] + scores.structure_info_score * coeff_df['sbio']) / sum(coeff_df.values())
+    else:
+        scores['mpo_score'] = np.nan
 
     scores = scores.round(2)
     # ================================================================================================================#
