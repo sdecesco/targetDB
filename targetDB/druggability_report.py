@@ -244,7 +244,10 @@ def get_single_excel(target):
                         else:
                             col = col + 1
                             wb_general_info.write(row, col, v, v_center)
-                target_desc = td.get_descriptors_list(uniprot_id, targetdb=targetDB,mode='single')
+
+                target_desc = td.get_descriptors_list(uniprot_id, targetdb=targetDB)
+                tscore = td.target_scores(target_desc,mode='single')
+                target_desc = target_desc.merge(tscore.scores,on='Target_id',how='left')
                 score_col = ['structure_info_score', 'structural_drug_score', 'chemistry_score', 'biology_score',
                              'disease_score', 'genetic_score', 'information_score', 'safety_score']
                 target_score = target_desc[score_col] * 10
@@ -260,7 +263,6 @@ def get_single_excel(target):
                 spider_plot = td.make_spider_plot(target_score.loc[uniprot_id].values, target_score.columns,
                                                   target_name=res['general_info'].iloc[0]['Gene_name'])
                 wb_general_info.insert_image('G1', 'spider_plot', {'image_data': spider_plot})
-
 
             if not res['disease'].empty:
                 for i in range(len(res['disease'])):
@@ -344,15 +346,6 @@ def get_single_excel(target):
                         row = row + i + 1
                         wb_expression.write(row, col, v)
                 wb_expression.conditional_format(3, 8, row, 8, {'type': 'data_bar'})
-
-            # organ_chart = workbook.add_chart({'type': 'bar'})
-            # organ_chart.add_series({'values': '=expression!$I$4:$I$16',
-            #                         'categories': '=expression!$F$4:$F$16',
-            #                         'name': 'Organ Expression'})
-            # organ_chart.set_legend({'none': True})
-            # organ_chart.set_x_axis({'min': 0, 'max': 3, 'major_unit': 1, 'minor_unit_type': 'level',
-            #                         'major_gridlines': {'visible': True, 'line': {'width': 1.25, 'dash_type': 'dash'}}})
-            # wb_general_info.insert_chart('G1', organ_chart)
 
             if not res['tissue_expression'].empty:
                 previous_organ = ''
@@ -792,6 +785,8 @@ def get_list_excel(list_targets):
     gene_ids = gene_ids.replace('[\'', '').replace('\']', '')
 
     data = td.get_descriptors_list(gene_ids, targetdb=targetDB)
+    tscore = td.target_scores(data)
+    data = data.merge(tscore.scores,on='Target_id',how='left')
     data = data.merge(pubmed, on='Target_id', how='left')
     list_done = data.Target_id.values.tolist()
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import pandas as pd
-from targetDB import cns_mpo as mpo
 import numpy as np
 import io, sqlite3, math
 import scipy.stats as sc
@@ -33,43 +32,49 @@ class StdevFunc:
 
 class get_mpo_coeff:
     def __init__(self, master):
-        headers = ['Structural\ninformation','Structural\nDruggability','Chemistry','Biology','Diseases\nLinks','Genetic\nLinks','Literature\nInformation','Safety']
+        headers = ['Structural\ninformation', 'Structural\nDruggability', 'Chemistry', 'Biology', 'Diseases\nLinks',
+                   'Genetic\nLinks', 'Literature\nInformation', 'Safety']
         colors = ['#95d0fc', '#0485d1', '#b790d4', '#87ae73', '#fec615', '#fb7d07', '#95a3a6', '#ff474c']
+        self.coeff = None
         self.master = master
         Label(self.master, height=2, text='Please input the desired weigth for the MPO score component',
-              font='bold').grid(row=0,columnspan=8)
+              font='bold').grid(row=0, columnspan=8)
         for i in range(len(headers)):
-            Label(self.master, height=2, text=headers[i],font='bold',bg=colors[i]).grid(row=2,column=i,sticky=W+E)
-        Button(self.master, text='Validate', command=self.get_values, height=2, width=60, fg='red', bg='white').grid(columnspan=8,row=1)
-        self.structural_info = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#95d0fc', font='bold')
+            Label(self.master, height=2, text=headers[i], font='bold', bg=colors[i]).grid(row=2, column=i, sticky=W + E)
+        Button(self.master, text='Validate', command=self.get_values, height=2, width=60, fg='red', bg='white').grid(
+            columnspan=8, row=1)
+        self.structural_info = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10,
+                                     bg='#95d0fc', font='bold')
         self.structural_info.set(50)
-        self.structural_info.grid(row=3,column=0,sticky=W+E)
-        self.structural_drug = Scale(self.master, from_=100, to=0,orient=VERTICAL, length=300, tickinterval=10, bg='#0485d1', font='bold', fg='white')
+        self.structural_info.grid(row=3, column=0, sticky=W + E)
+        self.structural_drug = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10,
+                                     bg='#0485d1', font='bold', fg='white')
         self.structural_drug.set(50)
-        self.structural_drug.grid(row=3,column=1,sticky=W+E)
-        self.chemistry = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#b790d4', font='bold')
+        self.structural_drug.grid(row=3, column=1, sticky=W + E)
+        self.chemistry = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#b790d4',
+                               font='bold')
         self.chemistry.set(50)
-        self.chemistry.grid(row=3,column=2,sticky=W+E)
-        self.biology = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#87ae73', font='bold')
+        self.chemistry.grid(row=3, column=2, sticky=W + E)
+        self.biology = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#87ae73',
+                             font='bold')
         self.biology.set(50)
-        self.biology.grid(row=3,column=3,sticky=W+E)
-        self.disease = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#fec615', font='bold')
+        self.biology.grid(row=3, column=3, sticky=W + E)
+        self.disease = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#fec615',
+                             font='bold')
         self.disease.set(50)
-        self.disease.grid(row=3,column=4,sticky=W+E)
-        self.genetic = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#fb7d07', font='bold')
+        self.disease.grid(row=3, column=4, sticky=W + E)
+        self.genetic = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#fb7d07',
+                             font='bold')
         self.genetic.set(50)
-        self.genetic.grid(row=3,column=5,sticky=W+E)
-        self.information = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#95a3a6', font='bold', fg='white')
+        self.genetic.grid(row=3, column=5, sticky=W + E)
+        self.information = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10,
+                                 bg='#95a3a6', font='bold', fg='white')
         self.information.set(50)
-        self.information.grid(row=3,column=6,sticky=W+E)
-        self.safety = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#ff474c', font='bold', fg='white')
+        self.information.grid(row=3, column=6, sticky=W + E)
+        self.safety = Scale(self.master, from_=100, to=0, orient=VERTICAL, length=300, tickinterval=10, bg='#ff474c',
+                            font='bold', fg='white')
         self.safety.set(50)
-        self.safety.grid(row=3,column=7,sticky=W+E)
-
-
-        # LabelFrame(self.master, height=50).grid(row=3,column=0)
-        # Button(self.master, text='Validate', command=self.get_values, height=2, width=60, fg='red', bg='white').pack()
-        # LabelFrame(self.master, height=50).pack()
+        self.safety.grid(row=3, column=7, sticky=W + E)
 
     def get_values(self):
         self.coeff = {'sbio': self.structural_info.get() / 100, 'sdrug': self.structural_drug.get() / 100,
@@ -77,6 +82,195 @@ class get_mpo_coeff:
                       'dise': self.disease.get() / 100, 'gen': self.genetic.get() / 100,
                       'info': self.information.get() / 100, 'safe': self.safety.get() / 100}
         self.master.destroy()
+
+
+class target_scores:
+    def __init__(self, data, mode='list'):
+        self.mode = mode
+        self.data = data
+        self.scores = self.data.Target_id.reset_index().drop(['index'], axis=1)
+        self.score_components = self.data.Target_id.reset_index().drop(['index'], axis=1)
+
+        # ==============================================================================================#
+        # ==================================== SCORE DATAFRAME =========================================#
+        # ==============================================================================================#
+
+        self.get_structure_info_score()
+        self.get_structure_druggability_score()
+        self.get_chem_score()
+        self.get_bio_score()
+        self.get_disease_score()
+        self.get_genetic_score()
+        self.get_info_score()
+        self.get_safety_score()
+        self.scores = self.scores.fillna(0)
+        self.get_mpo_score()
+        self.scores = self.scores.round(2)
+
+    def get_mpo_score(self):
+        if self.mode == 'list':
+            window = Tk()
+            values = get_mpo_coeff(window)
+            window.mainloop()
+
+            coeff_df = values.coeff
+
+            self.scores[
+                'mpo_score'] = (self.scores.safety_score * coeff_df['safe'] + self.scores.information_score * coeff_df[
+                'info'] + self.scores.genetic_score * coeff_df['gen'] + self.scores.disease_score * coeff_df[
+                                    'dise'] + self.scores.biology_score * coeff_df[
+                                    'bio'] + self.scores.chemistry_score *
+                                coeff_df[
+                                    'chem'] + self.scores.structural_drug_score * coeff_df[
+                                    'sdrug'] + self.scores.structure_info_score * coeff_df['sbio']) / sum(
+                coeff_df.values())
+        else:
+            self.scores['mpo_score'] = np.nan
+
+    def get_structure_info_score(self):
+        # ==============================================================================================#
+        # ================================= STRUCTURE INFO SCORE =======================================#
+        # ==============================================================================================#
+        structural_info_cols = ["Target_id", "PDB_total_count", '%_sequence_covered', '%_domain_covered',
+                                "PDB_blast_close_count", "PDB_blast_max_similarity"]
+        structural_info_df = self.data[structural_info_cols].copy()
+        structural_info_df['pdb_count_score'] = np.where(structural_info_df.PDB_total_count >= 3, 1, 0)
+        structural_info_df['pdb_alt_count_score'] = np.where(((structural_info_df.PDB_blast_close_count * (
+                structural_info_df.PDB_blast_max_similarity / 100)) / 2) >= 3, 1, 0)
+        structural_info_df['structure_info_score'] = structural_info_df[
+            ['%_sequence_covered', '%_domain_covered', 'pdb_count_score', 'pdb_alt_count_score']].mean(axis=1)
+        struct_info_components = structural_info_df[
+            ['Target_id', '%_sequence_covered', '%_domain_covered', 'pdb_count_score', 'pdb_alt_count_score']]
+        struct_info_score = structural_info_df[['Target_id', "structure_info_score"]]
+        self.scores = self.scores.merge(struct_info_score, on='Target_id', how='left')
+        self.score_components = self.score_components.merge(struct_info_components, on='Target_id', how='left')
+
+    def get_structure_druggability_score(self):
+        structural_drug_cols = ["Target_id", "domain_tractable", "domain_druggable", "mean_druggability_score",
+                                "mean_alt_druggability_score", "mean_alt_similarity"]
+        structural_drug_df = self.data[structural_drug_cols].copy()
+        structural_drug_df['domain_drug_score'] = structural_drug_df[["domain_tractable", "domain_druggable"]].mean(
+            axis=1)
+        structural_drug_df['alt_drug_score'] = structural_drug_df.mean_alt_druggability_score * (
+                structural_drug_df.mean_alt_similarity / 100)
+        structural_drug_df['structural_drug_score'] = structural_drug_df[
+            ['mean_druggability_score', 'domain_drug_score', 'alt_drug_score']].mean(axis=1)
+        self.scores = self.scores.merge(structural_drug_df[['Target_id', 'structural_drug_score']], on='Target_id',
+                                        how='left')
+        self.score_components = self.score_components.merge(structural_drug_df[
+                                                                ['Target_id', 'mean_druggability_score',
+                                                                 'domain_drug_score', 'alt_drug_score']],
+                                                            on='Target_id', how='left')
+
+    def get_chem_score(self):
+        chemistry_cols = ["Target_id", "BindingDB_potent_count", "BindingDB_potent_phase2_count",
+                          "ChEMBL_bioactives_potent_count", "ChEMBL_bioactives_moderate_selectivity_count",
+                          "ChEMBL_bioactives_good_selectivity_count", "ChEMBL_bioactives_great_selectivity_count",
+                          "commercial_potent_total"]
+        chemistry_df = self.data[chemistry_cols].copy()
+        chemistry_df['bindingDB_potent'] = np.where(chemistry_df.BindingDB_potent_count > 0, 1, 0)
+        chemistry_df['bindingDB_phase2'] = np.where(chemistry_df.BindingDB_potent_phase2_count > 0, 1, 0)
+        chemistry_df['chembl_potent'] = np.where(chemistry_df.ChEMBL_bioactives_potent_count > 0, 1, 0)
+        chemistry_df['chembl_selective'] = (np.where(chemistry_df.ChEMBL_bioactives_moderate_selectivity_count > 0, 1,
+                                                     0) + np.where(
+            chemistry_df.ChEMBL_bioactives_good_selectivity_count > 0,
+            1, 0) + np.where(
+            chemistry_df.ChEMBL_bioactives_great_selectivity_count > 0, 1, 0)) / 3
+        chemistry_df['commercial_potent'] = np.where(chemistry_df.commercial_potent_total > 0, 1, 0)
+
+        chemistry_df['chemistry_score'] = chemistry_df[
+            ['bindingDB_potent', 'bindingDB_phase2', 'chembl_potent', 'chembl_selective', 'commercial_potent']].mean(
+            axis=1)
+        self.score_components = self.score_components.merge(chemistry_df[
+                                                                ['Target_id', 'bindingDB_potent', 'bindingDB_phase2',
+                                                                 'chembl_potent', 'chembl_selective',
+                                                                 'commercial_potent']], on='Target_id', how='left')
+        self.scores = self.scores.merge(chemistry_df[['Target_id', 'chemistry_score']], on='Target_id', how='left')
+
+    def get_bio_score(self):
+        biology_cols = ['Target_id', 'EXP_LVL_AVG', 'Ab Count', 'variants_count', 'mutants_count',
+                        'number_of_genotypes',
+                        'kegg_count', 'reactome_count']
+        biology_df = self.data[biology_cols].copy()
+        biology_df['bio_EScore'] = np.where(biology_df.EXP_LVL_AVG > 0, 1, 0)
+        biology_df['bio_AScore'] = np.where(biology_df['Ab Count'] > 50, 1, 0)
+        biology_df['bio_VScore'] = np.where(biology_df.variants_count > 0, 1, 0)
+        biology_df['bio_MScore'] = np.where(biology_df.mutants_count > 0, 1, 0)
+        biology_df['bio_GScore'] = np.where(biology_df.number_of_genotypes > 0, 1, 0)
+        biology_df['bio_PScore'] = (np.where(biology_df.kegg_count > 0, 1, 0) + np.where(biology_df.reactome_count > 0,
+                                                                                         1,
+                                                                                         0)) / 2
+        biology_df['biology_score'] = biology_df[
+            ['bio_EScore', 'bio_AScore', 'bio_VScore', 'bio_MScore', 'bio_GScore', 'bio_PScore']].mean(
+            axis=1)
+
+        self.scores = self.scores.merge(biology_df[['Target_id', 'biology_score']], on='Target_id', how='left')
+        self.score_components = self.score_components.merge(biology_df[
+                                                                ['Target_id', 'bio_EScore', 'bio_AScore', 'bio_VScore',
+                                                                 'bio_MScore', 'bio_GScore', 'bio_PScore']])
+
+    def get_disease_score(self):
+        disease_cols = ['Target_id', 'disease_count_uniprot', 'disease_count_tcrd', 'OT_number_of_disease_areas',
+                        'OT_max_association_score']
+        disease_df = self.data[disease_cols].copy()
+        disease_df['dis_AScore'] = (np.where(disease_df.OT_number_of_disease_areas > 0, 1, 0) + np.where(
+            disease_df.OT_number_of_disease_areas > 1, 1, 0)) / 2
+        disease_df['dis_UScore'] = np.where(disease_df.disease_count_uniprot > 0, 1, 0)
+        disease_df['dis_TScore'] = np.where(disease_df.disease_count_tcrd > 0, 1, 0)
+        disease_df['disease_score'] = (disease_df[
+                                           'OT_max_association_score'] * 2 + disease_df.dis_AScore + disease_df.dis_UScore + disease_df.dis_TScore) / 5
+        disease_score_component = disease_df[
+            ['Target_id', 'OT_max_association_score', 'dis_AScore', 'dis_UScore', 'dis_TScore']]
+        self.scores = self.scores.merge(disease_df[['Target_id', 'disease_score']], on='Target_id', how='left')
+        self.score_components = self.score_components.merge(disease_score_component, on='Target_id', how='left')
+
+    def get_genetic_score(self):
+        col_genetic = ['Target_id', 'gwas_count', 'OT_MAX_VAL_genetic_association', 'OT_NUM_MAX_genetic_association']
+        genetic_df = self.data[col_genetic].copy()
+        genetic_df['genetic_NORM'] = np.where(genetic_df.OT_NUM_MAX_genetic_association > 0, 0.5, 0) + np.where(
+            genetic_df.OT_NUM_MAX_genetic_association > 1, 0.25, 0) + np.where(
+            genetic_df.OT_NUM_MAX_genetic_association >= 5, 0.25, 0)
+        genetic_df['gen_GScore'] = np.where(genetic_df.gwas_count > 0, 0.5, 0) + np.where(genetic_df.gwas_count > 1,
+                                                                                          0.5, 0)
+        genetic_df['gen_AScore'] = genetic_df.OT_MAX_VAL_genetic_association * genetic_df.genetic_NORM
+        genetic_df['genetic_score'] = genetic_df.gen_AScore
+
+        self.score_components = self.score_components.merge(genetic_df[['Target_id', 'gen_AScore', 'gen_GScore']],
+                                                            on='Target_id', how='left')
+        self.scores = self.scores.merge(genetic_df[['Target_id', 'genetic_score']], on='Target_id', how='left')
+
+    def get_info_score(self):
+        col_info = ['Target_id', 'JensenLab PubMed Score']
+        info_df = self.data[col_info].copy()
+        info_df['information_score'] = np.where(info_df['JensenLab PubMed Score'] >= 100, 1,
+                                                info_df['JensenLab PubMed Score'] / 100)
+
+        self.scores = self.scores.merge(info_df[['Target_id', 'information_score']], on='Target_id', how='left')
+        self.score_components = self.score_components.merge(info_df[['Target_id', 'information_score']], on='Target_id',
+                                                            how='left')
+
+    def get_safety_score(self):
+        col_safety = ['Target_id', 'Heart_alert', 'Liver_alert', 'Kidney_alert', 'number_of_genotypes',
+                      'phenotypes_heterozygotes_lethal_count',
+                      'phenotypes_homozygotes_lethal_count']
+        safety_df = self.data[col_safety].copy()
+        safety_df['safe_GScore'] = (np.where(safety_df.phenotypes_homozygotes_lethal_count > 0,
+                                             np.where(safety_df.phenotypes_heterozygotes_lethal_count > 0, 2, 1),
+                                             np.where(safety_df.phenotypes_heterozygotes_lethal_count > 0, 2,
+                                                      np.where(safety_df.number_of_genotypes.isna(), np.nan, 0)))) / 2
+        safety_df['safe_EScore'] = np.where(safety_df[['Heart_alert', 'Liver_alert', 'Kidney_alert']].any(axis=1), 1,
+                                            np.where(
+                                                safety_df[['Heart_alert', 'Liver_alert', 'Kidney_alert']].isna().all(
+                                                    axis=1),
+                                                np.nan, 0))
+        safety_df['safety_score'] = safety_df[['safe_GScore', 'safe_EScore']].mean(axis=1)
+        safety_score_component = safety_df[
+            ['Target_id','safe_GScore', 'safe_EScore', 'Heart_alert', 'Liver_alert', 'Kidney_alert']].copy()
+        rep_dict = {'True': 1, 'False': 0}
+        safety_score_component.replace(rep_dict, inplace=True)
+
+        self.score_components = self.score_components.merge(safety_score_component, on='Target_id', how='left')
+        self.scores = self.scores.merge(safety_df[['Target_id', 'safety_score']], on='Target_id', how='left')
 
 
 def range_list(x):
@@ -118,512 +312,7 @@ def remove_overlap(ranges):
     return merged
 
 
-def get_descriptors(target_id, targetdb=None):
-    connector_targetDB = sqlite3.connect(targetdb)
-    connector_targetDB.create_aggregate('stddev', 1, StdevFunc)
-
-    list_queries = {'gen_info': """SELECT * FROM Targets WHERE Target_id='%s'""" % target_id,
-                    'disease': """SELECT Target_id,disease_name,disease_id FROM disease WHERE Target_id='%s'""" % target_id,
-                    'reactome': """SELECT pathway_name FROM pathways WHERE pathway_dataset='Reactome pathways data set' AND Target_id='%s'""" % target_id,
-                    'kegg': """SELECT pathway_name FROM pathways WHERE pathway_dataset='KEGG pathways data set' AND Target_id='%s'""" % target_id,
-                    'disease_exp': """SELECT
-	  disease,
-	  round(avg(t_stat),1) as t_stat,
-	  round(stddev(t_stat),1) as std_dev_t,
-	  count(t_stat) as n,
-	  max(expression_status) as direction
-	  FROM diff_exp_disease
-	  WHERE Target_id='%s'
-	  GROUP BY Target_id,disease
-	  ORDER BY t_stat DESC""" % target_id,
-                    'gwas': """SELECT
-	  phenotype,
-	  organism,
-	  p_value,
-	  first_author as author,
-	  publication_year as 'year',
-	  pubmed_id
-	FROM gwas
-	WHERE Target_id='%s'
-	ORDER BY phenotype""" % target_id,
-                    'tissue': """SELECT
-	  Tissue,
-	  round(avg(t_stat),1) as t_stat,
-	  round(stddev(t_stat),1) as std_dev_t,
-	  count(t_stat) as n
-	  FROM diff_exp_tissue
-	  WHERE Target_id='%s'
-	  GROUP BY Tissue
-	  ORDER BY t_stat DESC""" % target_id,
-                    'selectivity': """SELECT
-	Selectivity_entropy
-	FROM protein_expression_selectivity
-	WHERE Target_id='%s'""" % target_id,
-                    'tissue_expression': """SELECT
-	  organ,
-	  tissue,
-	  cell,
-	  value
-	  FROM protein_expression_levels
-	  WHERE Target_id='%s'""" % target_id,
-                    'phenotype': """SELECT
-	  Allele_symbol,
-	  Allele_type,
-	  CASE WHEN zygosity is null THEN 'NOT DECLARED' ELSE UPPER(zygosity) END AS zygosity,
-	  genotype,
-	  Phenotype
-	FROM phenotype WHERE Target_id='%s'
-	ORDER BY Allele_id,zygosity,genotype""" % target_id,
-                    'isoforms': """SELECT
-	  (T.Gene_name||'-'||I.Isoform_name) as isoform_name,
-	  I.Isoform_id,
-	  I.Sequence,
-	  I.n_residues,
-	  CASE WHEN I.Canonical = 1 THEN 'Yes' ELSE 'No' END AS is_canonical,
-	  I.Identity AS similarity
-	FROM Isoforms I
-	LEFT JOIN Targets T
-	  ON I.Target_id = T.Target_id
-	WHERE I.Target_id='%s' ORDER BY I.Canonical DESC""" % target_id,
-                    'isoforms_mod': """SELECT
-	  IM.isoform_id,
-	  M.start,
-	  M.stop,
-	  M.previous AS previous_seq,
-	  M.action AS modification_type,
-	  M.new AS new_seq,
-	  M.domains AS in_domains,
-	  M.comment AS comments
-	FROM isoform_modifications IM
-	LEFT JOIN modifications M
-	  on IM.mod_id = M.Unique_modID
-	WHERE IM.isoform_id in (SELECT I.Isoform_id FROM Isoforms I WHERE I.Target_id='%s')""" % target_id,
-                    'var': """SELECT
-	  M.start,
-	  M.stop,
-	  M.previous AS previous_seq,
-	  M.action AS modification_type,
-	  M.new AS new_seq,
-	  M.domains AS in_domains,
-	  M.comment AS comments
-	FROM modifications M
-	WHERE M.mod_type = 'VAR' AND M.Target_id='%s'""" % target_id,
-                    'mut': """SELECT
-	  M.start,
-	  M.stop,
-	  M.previous AS previous_seq,
-	  M.action AS modification_type,
-	  M.new AS new_seq,
-	  M.domains AS in_domains,
-	  M.comment AS comments
-	FROM modifications M
-	WHERE M.mod_type = 'MUTAGEN' AND M.Target_id='%s'""" % target_id,
-                    'domains': """SELECT
-	  Domain_name,
-	  Domain_start as start,
-	  Domain_stop as stop,
-	  length,
-	  source_name as source
-	FROM Domain_targets
-	WHERE Target_id='%s'""" % target_id,
-                    'pdb_blast': """SELECT
-	  Hit_PDB_code as PDB_code,
-	  Chain_Letter as Chain,
-	  similarity,
-	  Hit_gene_name as gene,
-	  Hit_gene_species as species,
-	  max(tractable) SITES_tractable,
-	  max(druggable) SITES_druggable
-	FROM `3D_Blast`
-	  LEFT JOIN drugEbility_sites DS
-	  ON DS.pdb_code=Hit_PDB_code
-	WHERE Query_target_id='%s'
-	GROUP BY Hit_PDB_code
-	ORDER BY similarity DESC""" % target_id,
-                    'pdb': """SELECT
-	  C.PDB_code,
-	  P.Technique,
-	  P.Resolution,
-	  GROUP_CONCAT(DISTINCT C.Chain) AS Chain,
-	  C.n_residues,
-	  C.start_stop,
-	  GROUP_CONCAT(DISTINCT D.Domain_name) AS Domain_name,
-	  B.type type_of_binder,
-	  B.binding_type,
-	  B.binding_operator operator,
-	  B.binding_value 'value',
-	  B.binding_units units,
-	  B.lig_name Ligand_name,
-	  B.pub_year publication_year,
-	  max(DS.tractable) SITES_tractable,
-	  max(DS.druggable) SITES_druggable
-	FROM PDB_Chains C
-	  LEFT JOIN PDB P
-		ON C.PDB_code = P.PDB_code
-	  LEFT JOIN PDBChain_Domain Domain
-		ON C.Chain_id = Domain.Chain_id
-	  LEFT JOIN Domain_targets D
-		ON Domain.Domain_id = D.domain_id
-	  LEFT JOIN pdb_bind B
-		ON B.pdb_code = C.PDB_code
-	  LEFT JOIN drugEbility_sites DS
-		ON DS.pdb_code = LOWER(C.PDB_code)
-	WHERE C.Target_id='%s'
-	GROUP BY C.PDB_code,P.Technique,P.Resolution,C.n_residues,C.start_stop""" % target_id,
-                    'pockets': """SELECT
-	  F.PDB_code,
-	  F.DrugScore as druggability_score,
-	  round(F.total_sasa,1) as area,
-	  round(F.volume,1) as volume,
-	  round((F.apolar_sasa/F.total_sasa)*100,1) as fraction_apolar,
-	  F.Pocket_number as pocket_number,
-	  F.Score as pocket_score,
-	  GROUP_CONCAT((D.Domain_name||' ('||Domain.Coverage||'%)') ) as domains
-	FROM fPockets F
-	  LEFT JOIN fPockets_Domain Domain
-		ON F.Pocket_id = Domain.Pocket_id
-	  LEFT JOIN Domain_targets D
-		ON Domain.Domain_id=D.domain_id
-	WHERE F.Target_id='{target}'
-	AND F.druggable='TRUE' AND F.blast='FALSE'
-	GROUP BY F.PDB_code,F.DrugScore,F.total_sasa,F.volume,fraction_apolar,pocket_number,pocket_score""".format(
-                        target=target_id),
-                    'alt_pockets': """SELECT
-	  F.PDB_code,
-	  F.DrugScore as druggability_score,
-	  round(F.total_sasa,1) as area,
-	  round(F.volume,1) as volume,
-	  round((F.apolar_sasa/F.total_sasa)*100,1) as fraction_apolar,
-	  F.Pocket_number as pocket_number,
-	  F.Score as pocket_score,
-	  B.Hit_gene_name as gene,
-	  B.Hit_gene_species as species,
-	  B.similarity
-	FROM fPockets F
-	  LEFT JOIN `3D_Blast` B
-		ON F.Target_id = B.Query_target_id AND F.PDB_code = B.Hit_PDB_code
-
-	WHERE F.Target_id='%s'
-	AND F.druggable='TRUE' AND F.blast='TRUE'
-	ORDER BY B.similarity DESC""" % target_id,
-                    'bioactives': """SELECT
-	B.lig_id,
-	  B.assay_id,
-	  B.target_id,
-	  B.standard_type,
-	  B.operator,
-	  B.value_num,
-	  B.units,
-	  B.activity_comment,
-	  B.data_validity_comment,
-	  B.doi as ref_bio,
-	  B.pchembl_value as pX,
-	  L.mol_name,
-	  L.max_phase,
-	  L.oral,
-	  L.indication_class,
-	  L.class_def,
-	  L.alogp as aLogP,
-	  L.acd_logd as LogD,
-	  L.acd_logp as LogP,
-	  L.acd_most_apka as apKa,
-	  L.acd_most_bpka as bpKa,
-	  L.HBA,
-	  L.HBD,
-	  L.TPSA,
-	  L.molecularWeight as MW,
-	  L.rotatableBonds as rotB,
-	  L.n_Ar_rings as nAr,
-	  L.molecular_species,
-	  L.num_ro5_violations as ro5_violations,
-	  L.ro3_pass as pass_ro3,
-	  L.canonical_smiles as SMILES,
-	  A.assay_description,
-	  A.doi as assay_ref,
-	  A.species as assay_species,
-	  A.bioactivity_type,
-	  A.confidence_score
-	FROM Crossref C
-	  LEFT JOIN bioactivities B
-	  ON C.Chembl_id=B.Target_id
-	  LEFT JOIN ligands L
-	  ON B.lig_id=L.lig_id
-	  LEFT JOIN assays A
-	  ON B.assay_id=A.assay_id
-	WHERE C.target_id='%s'
-	AND B.operator!='>' AND B.operator!='<'
-	AND A.confidence_score>=8""" % target_id,
-                    'commercials': """SELECT
-	smiles,
-	affinity_type,
-	op,
-	affinity_value,
-	affinity_unit,
-	price,
-	website
-	FROM purchasable_compounds
-	WHERE target_id='%s'""" % target_id,
-                    'bindingDB': """SELECT
-	  B.ligand_name,
-	  B.ZincID,
-	  B.`IC50(nM)`,
-	  B.`EC50(nM)`,
-	  B.`Ki(nM)`,
-	  B.`Kd(nM)`,
-	  B.`kon(M-1s-1)`,
-	  B.`koff(s-1)`,
-	  B.pH,
-	  B.`Temp`,
-	  B.Source,
-	  B.DOI,
-	  B.institution,
-	  B.patent_number,
-	  L.mol_name,
-	  L.max_phase,
-	  L.oral,
-	  L.indication_class,
-	  L.class_def,
-	  L.alogp as aLogP,
-	  L.acd_logd as LogD,
-	  L.acd_logp as LogP,
-	  L.acd_most_apka as apKa,
-	  L.acd_most_bpka as bpKa,
-	  L.HBA,
-	  L.HBD,
-	  L.TPSA,
-	  L.molecularWeight as MW,
-	  L.rotatableBonds as rotB,
-	  L.n_Ar_rings as nAr,
-	  L.molecular_species,
-	  L.num_ro5_violations as ro5_violations,
-	  L.ro3_pass as pass_ro3,
-	  B.ligand_smiles as SMILES
-	FROM BindingDB B
-	  LEFT JOIN ligands L
-	  ON B.inchi_key = L.std_inchi_key
-	WHERE target_id = '%s'""" % target_id,
-                    'domain_drugE': """SELECT
-	GROUP_CONCAT(DISTINCT UPPER(pdb_code) ) pdb_list,
-	domain_fold,
-	domain_superfamily,
-	max(tractable) tractable,
-	max(druggable) druggable
-	FROM drugEbility_domains
-	WHERE pdb_code in (SELECT DISTINCT LOWER(PDB_code)
-	FROM PDB_Chains
-	WHERE target_id = '%s')
-	GROUP BY domain_fold""" % target_id}
-    results = {qname: pd.read_sql(query, con=connector_targetDB) for qname, query in list_queries.items()}
-
-    data = results['gen_info'].drop(['Species', 'species_id', 'Sequence',
-                                     'Cell_location', 'Process', 'Function', 'Synonyms',
-                                     'Date_modified', 'Protein_class', 'Protein_class_desc',
-                                     'Protein_class_short', 'chembl_id'], axis=1)
-
-    if not results['kegg'].empty:
-        data['pathways_kegg'] = len(results['kegg'])
-    else:
-        data['pathways_kegg'] = [0]
-
-    if not results['pockets'].empty:
-        if results['pdb'].empty:
-            data['number_druggable_pockets_NORM'] = 1
-        else:
-            data['number_druggable_pockets_NORM'] = results['pockets']['PDB_code'].nunique() / len(results['pdb'])
-        data['druggable_pockets_total'] = len(results['pockets'])
-        data['pockets_mean_area'] = results['pockets']['area'].mean()
-        data['pockets_mean_volume'] = results['pockets']['volume'].mean()
-        data['pockets_mean_apolarfrac'] = results['pockets']['fraction_apolar'].mean()
-        data['pockets_mean_druggability_score'] = results['pockets']['druggability_score'].mean()
-        data['pockets_stddev_druggability_score'] = results['pockets']['druggability_score'].std()
-        data['alternate_pockets'] = [False]
-    elif not results['alt_pockets'].empty:
-        data['number_druggable_pockets_NORM'] = results['alt_pockets']['PDB_code'].nunique() / len(results['pdb_blast'])
-        data['druggable_pockets_total'] = len(results['alt_pockets'])
-        data['pockets_mean_area'] = results['alt_pockets']['area'].mean()
-        data['pockets_mean_volume'] = results['alt_pockets']['volume'].mean()
-        data['pockets_mean_apolarfrac'] = results['alt_pockets']['fraction_apolar'].mean()
-        data['pockets_mean_druggability_score'] = results['alt_pockets']['druggability_score'].mean()
-        data['pockets_stddev_druggability_score'] = results['alt_pockets']['druggability_score'].std()
-        data['alternate_pockets'] = [True]
-    else:
-        data['number_druggable_pockets_NORM'] = [0]
-        data['druggable_pockets_total'] = [0]
-        data['pockets_mean_area'] = [None]
-        data['pockets_mean_volume'] = [None]
-        data['pockets_mean_apolarfrac'] = [None]
-        data['pockets_mean_druggability_score'] = [None]
-        data['pockets_stddev_druggability_score'] = [None]
-        data['alternate_pockets'] = [None]
-
-    data['bindingDB_count'] = len(results['bindingDB'])
-    potent = results['bindingDB'][((results['bindingDB'][['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)']] <= 10) &
-                                   (results['bindingDB'][['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)']].notna())).any(
-        axis=1)]
-    data['bindingDB_potent_count'] = len(potent)
-    data['bindingDB_potent_phase2_count'] = len(potent[potent['max_phase'] >= 2])
-
-    data['isoforms_count'] = len(results['isoforms'])
-
-    if not results['tissue_expression'].empty:
-        tissue = results['tissue_expression'].groupby('tissue').max().groupby('organ').mean().round(1).transpose()
-        tissue['Target_id'] = target_id
-        data = pd.merge(data, tissue)
-        data['Expression_selectivity'] = results['selectivity']
-        data['tissue_max_expression'] = results['tissue_expression'].groupby('tissue').max().groupby(
-            'organ').mean().round(1).idxmax().value
-    else:
-        data['Expression_selectivity'] = np.nan
-
-    data['variants_count'] = len(results['var'])
-    data['disease_count'] = len(results['disease'])
-    data['gwas_count'] = len(results['gwas'])
-    data['mutant_count'] = len(results['mut'])
-
-    results['bioactives']['CNS_MPO'] = mpo.calc_mpo_score(bpka=results['bioactives']['bpKa'],
-                                                          logP=results['bioactives']['LogP'],
-                                                          logD=results['bioactives']['LogD'],
-                                                          MW=results['bioactives']['MW'],
-                                                          HBD=results['bioactives']['HBD'],
-                                                          TPSA=results['bioactives']['TPSA'])
-    best = results['bioactives'][results['bioactives']['pX'].notnull()]
-    total_bioact = len(best)
-    best = best[best['pX'] >= 8]
-    total_potent = len(best)
-    best = best[best['standard_type'].isin(['Ki', 'Kd'])]
-
-    if not best.empty:
-        best['pX'].fillna(-np.log10(best.value_num / 1000000000), inplace=True)
-        query_lig = "','".join(best.lig_id.unique())
-        query = """SELECT
-				B.lig_id,
-				B.Target_id,
-				B.target_name,
-				ROUND(AVG(B.value_num),2) avg_value,
-				ROUND(STDDEV(B.value_num),2) sttdev,
-				COUNT(*) n_values
-				FROM bioactivities B
-				  LEFT JOIN assays A
-				  ON B.assay_id=A.assay_id
-				WHERE B.operator='=' 
-				  AND B.lig_id in ('%s')
-				  AND A.bioactivity_type='Binding'
-				  AND UPPER(B.standard_type) in ('KD','KI')
-				  AND B.data_validity_comment is NULL
-				  AND A.confidence_score>=8
-		GROUP BY B.lig_id,B.Target_id""" % query_lig
-        entropies = []
-        binding_data = pd.read_sql(query, con=connector_targetDB)
-        best_target_id = best.iloc[0]['Target_id']
-        if not binding_data.empty:
-            for name, group in binding_data.groupby('lig_id'):
-                best_target = True
-                group = group[(group['sttdev'] < group['avg_value'])].copy()
-                group['association'] = (1 / group.avg_value)
-                group['association_prob'] = group.association / group.association.sum()
-                if len(group) > 1:
-                    if group.loc[group['association_prob'].idxmax()]['Target_id'] == best_target_id:
-                        best_target = True
-                    else:
-                        best_target = False
-                entropies.append({'Selectivity': round(sc.entropy(group.association_prob), 2), 'lig_id': name,
-                                  'number of other targets': len(group),
-                                  'targets name': ' / '.join(np.unique(group['target_name'].values)),
-                                  'best_target': best_target})
-
-            entropy = pd.DataFrame(data=entropies)
-
-            best = pd.merge(best, entropy, on='lig_id')
-
-            total_moderate_selectivity = len(best[(best['Selectivity'] <= 2) & (best['best_target'] == True) & (
-                    best['number of other targets'] > 1)])
-            total_good_selectivity = len(best[(best['Selectivity'] <= 1.5) & (best['best_target'] == True) & (
-                    best['number of other targets'] > 1)])
-            total_great_selectivity = len(best[(best['Selectivity'] <= 1) & (best['best_target'] == True) & (
-                    best['number of other targets'] > 1)])
-        else:
-            total_moderate_selectivity = 0
-            total_good_selectivity = 0
-            total_great_selectivity = 0
-    else:
-        total_moderate_selectivity = 0
-        total_good_selectivity = 0
-        total_great_selectivity = 0
-
-    data['ChEMBL_bioactives_count'] = total_bioact
-    data['ChEMBL_bioactives_potent_count'] = total_potent
-    data['ChEMBL_bioactives_moderate_selectivity_count'] = total_moderate_selectivity
-    data['ChEMBL_bioactives_good_selectivity_count'] = total_good_selectivity
-    data['ChEMBL_bioactives_great_selectivity_count'] = total_great_selectivity
-
-    results['phenotype']['lethal'] = results['phenotype']['Phenotype'].str.contains('lethal|death', case=False)
-    results['phenotype']['normal'] = results['phenotype']['Phenotype'].str.contains('no abnormal phenotype detected',
-                                                                                    case=False)
-    data['phenotypes_count'] = len(results['phenotype'])
-    data['phenotypes_heterozygotes_lethal_count'] = len(results['phenotype'][
-                                                            (results['phenotype']['lethal'] == True) & (
-                                                                    results['phenotype'][
-                                                                        'zygosity'] == 'HETEROZYGOTE')])
-    data['phenotypes_homozygotes_lethal_count'] = len(results['phenotype'][(results['phenotype']['lethal'] == True) & (
-            results['phenotype']['zygosity'] == 'HOMOZYGOTE')])
-    data['phenotypes_heterozygotes_normal_count'] = len(results['phenotype'][
-                                                            (results['phenotype']['normal'] == True) & (
-                                                                    results['phenotype'][
-                                                                        'zygosity'] == 'HETEROZYGOTE')])
-    data['phenotypes_homozygotes_normal_count'] = len(results['phenotype'][(results['phenotype']['normal'] == True) & (
-            results['phenotype']['zygosity'] == 'HOMOZYGOTE')])
-
-    data['PDB_total_count'] = len(results['pdb'])
-    data['PDB_with_Ligand_count'] = len(results['pdb'][results['pdb']['type_of_binder'].notnull()])
-    data['PDB_sites_tractable'] = len(results['pdb'][results['pdb']['SITES_tractable'] == 1])
-    data['PDB_sites_druggable'] = len(results['pdb'][results['pdb']['SITES_druggable'] == 1])
-    data['PDB_blast_close_count'] = len(results['pdb_blast'])
-
-    data['domains_count'] = len(results['domains'])
-    data['domain_druggable'] = len(results['domain_drugE'][results['domain_drugE']['druggable'] == 1])
-    data['domain_tractable'] = len(results['domain_drugE'][results['domain_drugE']['tractable'] == 1])
-
-    data['commercials_total'] = len(results['commercials'])
-    data['commercials_potent_total'] = len(results['commercials'][results['commercials']['affinity_value'] <= 100])
-
-    query_id = """SELECT tcrd_id FROM tcrd_id WHERE Target_id= '%s'""" % target_id
-    tcrd_id = pd.read_sql(query_id, con=connector_targetDB)
-    if tcrd_id.empty:
-        tcrd_id = 'None'
-    else:
-        tcrd_id = tcrd_id.iloc[0]['tcrd_id']
-
-    tcrd_queries = {'target': """SELECT * FROM tcrd_target WHERE tcrd_id = '%s' """ % tcrd_id,
-                    'tdl_info': """SELECT * FROM tcrd_info WHERE protein_id = '%s'""" % tcrd_id,
-                    'disease': """SELECT protein_id,disease_id,doid,score,name,parent
-	FROM
-	tcrd_disease
-	WHERE protein_id='%s'
-	ORDER BY score DESC""" % tcrd_id,
-                    'novelty': """SELECT score FROM tcrd_novelty WHERE protein_id = '%s'""" % tcrd_id}
-    tcrd_res = {qname: pd.read_sql(query, con=connector_targetDB) for qname, query in tcrd_queries.items()}
-
-    tcrd_data = tcrd_res['target']
-    tcrd_data['Target_id'] = target_id
-    tcrd_data.set_index('tcrd_id', inplace=True)
-
-    tcrd_res['tdl_info'].index = tcrd_res['tdl_info'].protein_id
-    tcrd_data = tcrd_data.join(tcrd_res['tdl_info'])
-
-    tcrd_data['tcrd_disease_count'] = len(tcrd_res['disease'][(~tcrd_res['disease']['doid'].isin(
-        tcrd_res['disease']['parent'].unique())) & (tcrd_res['disease']['score'] > 1)])
-
-    if len(tcrd_res['novelty']) != 0:
-        tcrd_data['tcrd_novelty_score'] = tcrd_res['novelty']['score'].iloc[0]
-    else:
-        tcrd_data['tcrd_novelty_score'] = np.nan
-
-    data = pd.merge(data, tcrd_data, on='Target_id')
-    connector_targetDB.close()
-    return data
-
-
-def get_descriptors_list(target_id, targetdb=None,mode='list'):
+def get_descriptors_list(target_id, targetdb=None):
     connector_targetDB = sqlite3.connect(targetdb)
     connector_targetDB.create_aggregate('stddev', 1, StdevFunc)
     list_queries = {'gen_info': """SELECT * FROM Targets WHERE Target_id in ('%s')""" % target_id,
@@ -1307,7 +996,8 @@ def get_descriptors_list(target_id, targetdb=None,mode='list'):
             pdb_range.loc[tid, ['%_domain_covered']] = sum(domain_coverages) / len(
                 domain_range.loc[tid]['ranges'])
         pdb_range.loc[tid, ['n_length']] = n_residues
-        pdb_range.loc[tid, ['%_sequence_covered']] = np.where((n_residues / general_data.loc[tid].length)>1,1,n_residues / general_data.loc[tid].length)
+        pdb_range.loc[tid, ['%_sequence_covered']] = np.where((n_residues / general_data.loc[tid].length) > 1, 1,
+                                                              n_residues / general_data.loc[tid].length)
     pdb_range = pdb_range.drop(['start_stop', 'n_length'], axis=1)
     pdb_range.reset_index(drop=True, inplace=True)
 
@@ -1398,166 +1088,166 @@ def get_descriptors_list(target_id, targetdb=None,mode='list'):
 
     data = data.merge(tcrd_data, on='Target_id', how='left')
 
-    # ==============================================================================================#
-    # ================================= STRUCTURE INFO SCORE =======================================#
-    # ==============================================================================================#
-    structural_info_cols = ["Target_id", "PDB_total_count", '%_sequence_covered', '%_domain_covered',
-                            "PDB_blast_close_count", "PDB_blast_max_similarity"]
-    structural_info_df = data[structural_info_cols].copy()
-    structural_info_df['pdb_count_score'] = np.where(structural_info_df.PDB_total_count >= 3,1,0)
-    structural_info_df['pdb_alt_count_score'] = np.where(((structural_info_df.PDB_blast_close_count * (
-            structural_info_df.PDB_blast_max_similarity / 100)) / 2) >= 3,1,0)
-    structural_info_df['structure_info_score'] = structural_info_df[
-        ['%_sequence_covered', '%_domain_covered', 'pdb_count_score', 'pdb_alt_count_score']].mean(axis=1)
-
-    # ==============================================================================================#
-    # ==================================== SCORE DATAFRAME =========================================#
-    # ==============================================================================================#
-
-    scores = structural_info_df[['Target_id', "structure_info_score"]]
-
-    # ==============================================================================================#
-    # ============================= STRUCTURE DRUGGABILITY SCORE ===================================#
-    # ==============================================================================================#
-
-    structural_drug_cols = ["Target_id", "domain_tractable", "domain_druggable", "mean_druggability_score",
-                            "mean_alt_druggability_score", "mean_alt_similarity"]
-    structural_drug_df = data[structural_drug_cols].copy()
-    structural_drug_df['domain_drug_score'] = structural_drug_df[["domain_tractable", "domain_druggable"]].mean(axis=1)
-    structural_drug_df['alt_drug_score'] = structural_drug_df.mean_alt_druggability_score * (
-            structural_drug_df.mean_alt_similarity / 100)
-    structural_drug_df['structural_drug_score'] = structural_drug_df[
-        ['mean_druggability_score', 'domain_drug_score', 'alt_drug_score']].mean(axis=1)
-
-    scores = scores.merge(structural_drug_df[['Target_id', 'structural_drug_score']], on='Target_id', how='left')
-
-    # ==============================================================================================#
-    # ================================== CHEMISTRY SCORE ===========================================#
-    # ==============================================================================================#
-
-    chemistry_cols = ["Target_id", "BindingDB_potent_count", "BindingDB_potent_phase2_count",
-                      "ChEMBL_bioactives_potent_count", "ChEMBL_bioactives_moderate_selectivity_count",
-                      "ChEMBL_bioactives_good_selectivity_count", "ChEMBL_bioactives_great_selectivity_count",
-                      "commercial_potent_total"]
-    chemistry_df = data[chemistry_cols].copy()
-    chemistry_df['bindingDB_potent'] = chemistry_df.BindingDB_potent_count > 0
-    chemistry_df['bindingDB_phase2'] = chemistry_df.BindingDB_potent_phase2_count > 0
-    chemistry_df['chembl_potent'] = chemistry_df.ChEMBL_bioactives_potent_count > 0
-    chemistry_df['chembl_select_1'] = (np.where(chemistry_df.ChEMBL_bioactives_moderate_selectivity_count > 0, 1,
-                                                0) + np.where(chemistry_df.ChEMBL_bioactives_good_selectivity_count > 0,
-                                                              1, 0) + np.where(
-        chemistry_df.ChEMBL_bioactives_great_selectivity_count > 0, 1, 0)) / 3
-    chemistry_df['commercial_potent'] = chemistry_df.commercial_potent_total > 0
-
-    chemistry_df['chemistry_score'] = chemistry_df[
-        ['bindingDB_potent', 'bindingDB_phase2', 'chembl_potent', 'chembl_select_1', 'commercial_potent']].mean(axis=1)
-
-    scores = scores.merge(chemistry_df[['Target_id', 'chemistry_score']], on='Target_id', how='left')
-
-    # ==============================================================================================#
-    # ==================================== BIOLOGY SCORE ===========================================#
-    # ==============================================================================================#
-
-    biology_cols = ['Target_id', 'EXP_LVL_AVG', 'Ab Count', 'variants_count', 'mutants_count', 'number_of_genotypes',
-                    'kegg_count', 'reactome_count']
-    biology_df = data[biology_cols].copy()
-    biology_df['EScore'] = np.where(biology_df.EXP_LVL_AVG > 0, 1, 0)
-    biology_df['AScore'] = np.where(biology_df['Ab Count'] > 50, 1, 0)
-    biology_df['VScore'] = np.where(biology_df.variants_count > 0, 1, 0)
-    biology_df['MScore'] = np.where(biology_df.mutants_count > 0, 1, 0)
-    biology_df['GScore'] = np.where(biology_df.number_of_genotypes > 0, 1, 0)
-    biology_df['PScore'] = (np.where(biology_df.kegg_count > 0, 1, 0) + np.where(biology_df.reactome_count > 0, 1,
-                                                                                 0)) / 2
-    biology_df['biology_score'] = biology_df[['EScore', 'AScore', 'VScore', 'MScore', 'GScore', 'PScore']].mean(axis=1)
-
-    scores = scores.merge(biology_df[['Target_id', 'biology_score']], on='Target_id', how='left')
-
-    # ==============================================================================================#
-    # =============================== DISEASE LINK SCORE ===========================================#
-    # ==============================================================================================#
-
-    disease_cols = ['Target_id', 'disease_count_uniprot', 'disease_count_tcrd', 'OT_number_of_disease_areas',
-                    'OT_max_association_score']
-    disease_df = data[disease_cols].copy()
-    disease_df['AScore'] = (np.where(disease_df.OT_number_of_disease_areas > 0, 1, 0) + np.where(
-        disease_df.OT_number_of_disease_areas > 1, 1, 0)) / 2
-    disease_df['UScore'] = np.where(disease_df.disease_count_uniprot > 0, 1, 0)
-    disease_df['TScore'] = np.where(disease_df.disease_count_tcrd > 0, 1, 0)
-    disease_df['disease_score'] = (disease_df[
-                                       'OT_max_association_score'] * 2 + disease_df.AScore + disease_df.UScore + disease_df.TScore) / 5
-
-    scores = scores.merge(disease_df[['Target_id', 'disease_score']], on='Target_id', how='left')
-
-    # ==============================================================================================#
-    # =============================== GENETIC LINK SCORE ===========================================#
-    # ==============================================================================================#
-
-    col_genetic = ['Target_id', 'gwas_count', 'OT_MAX_VAL_genetic_association', 'OT_NUM_MAX_genetic_association']
-    genetic_df = data[col_genetic].copy()
-    genetic_df['genetic_NORM'] = np.where(genetic_df.OT_NUM_MAX_genetic_association > 0, 0.5, 0) + np.where(
-        genetic_df.OT_NUM_MAX_genetic_association > 1, 0.25, 0) + np.where(
-        genetic_df.OT_NUM_MAX_genetic_association >= 5, 0.25, 0)
-    genetic_df['GScore'] = np.where(genetic_df.gwas_count > 0, 0.5, 0) + np.where(genetic_df.gwas_count > 1, 0.5, 0)
-    genetic_df['AScore'] = genetic_df.OT_MAX_VAL_genetic_association * genetic_df.genetic_NORM
-    genetic_df['genetic_score'] = genetic_df.AScore
-
-    scores = scores.merge(genetic_df[['Target_id', 'genetic_score']], on='Target_id', how='left')
-
-    # ==============================================================================================#
-    # ================================ INFORMATION SCORE ===========================================#
-    # ==============================================================================================#
-
-    col_info = ['Target_id', 'JensenLab PubMed Score']
-    info_df = data[col_info].copy()
-    info_df['information_score'] = np.where(info_df['JensenLab PubMed Score'] >= 100, 1,
-                                            info_df['JensenLab PubMed Score'] / 100)
-
-    scores = scores.merge(info_df[['Target_id', 'information_score']], on='Target_id', how='left')
-
-    # ==============================================================================================#
-    # ================================== SAFETY SCORE ==============================================#
-    # ==============================================================================================#
-
-    col_safety = ['Target_id', 'Heart_alert', 'Liver_alert', 'Kidney_alert', 'number_of_genotypes',
-                  'phenotypes_heterozygotes_lethal_count',
-                  'phenotypes_homozygotes_lethal_count']
-    safety_df = data[col_safety].copy()
-    safety_df['GScore'] = (np.where(safety_df.phenotypes_homozygotes_lethal_count > 0,
-                                    np.where(safety_df.phenotypes_heterozygotes_lethal_count > 0, 2, 1),
-                                    np.where(safety_df.phenotypes_heterozygotes_lethal_count > 0, 2,
-                                             np.where(safety_df.number_of_genotypes.isna(), np.nan, 0)))) / 2
-    safety_df['EScore'] = np.where(safety_df[['Heart_alert', 'Liver_alert', 'Kidney_alert']].any(axis=1), 1, np.where(
-        safety_df[['Heart_alert', 'Liver_alert', 'Kidney_alert']].isna().all(axis=1), np.nan, 0))
-    safety_df['safety_score'] = safety_df[['GScore', 'EScore']].mean(axis=1)
-
-    scores = scores.merge(safety_df[['Target_id', 'safety_score']], on='Target_id', how='left')
-    scores = scores.fillna(0)
-    # ==============================================================================================#
-    # ==================================== MPO SCORE ===============================================#
-    # ==============================================================================================#
-
-    if mode =='list':
-        window = Tk()
-        values = get_mpo_coeff(window)
-        window.mainloop()
-
-        coeff_df = values.coeff
-
-        scores[
-            'mpo_score'] = (scores.safety_score * coeff_df['safe'] + scores.information_score * coeff_df[
-            'info'] + scores.genetic_score * coeff_df['gen'] + scores.disease_score * coeff_df[
-                                'dise'] + scores.biology_score * coeff_df['bio'] + scores.chemistry_score * coeff_df[
-                                'chem'] + scores.structural_drug_score * coeff_df[
-                                'sdrug'] + scores.structure_info_score * coeff_df['sbio']) / sum(coeff_df.values())
-    else:
-        scores['mpo_score'] = np.nan
-
-    scores = scores.round(2)
-    # ================================================================================================================#
-    # ========================================= COMBINE ALL ==========================================================#
-    # ================================================================================================================#
-
-    data = data.merge(scores, on='Target_id', how='left')
+    # # ==============================================================================================#
+    # # ================================= STRUCTURE INFO SCORE =======================================#
+    # # ==============================================================================================#
+    # structural_info_cols = ["Target_id", "PDB_total_count", '%_sequence_covered', '%_domain_covered',
+    #                         "PDB_blast_close_count", "PDB_blast_max_similarity"]
+    # structural_info_df = data[structural_info_cols].copy()
+    # structural_info_df['pdb_count_score'] = np.where(structural_info_df.PDB_total_count >= 3, 1, 0)
+    # structural_info_df['pdb_alt_count_score'] = np.where(((structural_info_df.PDB_blast_close_count * (
+    #         structural_info_df.PDB_blast_max_similarity / 100)) / 2) >= 3, 1, 0)
+    # structural_info_df['structure_info_score'] = structural_info_df[
+    #     ['%_sequence_covered', '%_domain_covered', 'pdb_count_score', 'pdb_alt_count_score']].mean(axis=1)
+    #
+    # # ==============================================================================================#
+    # # ==================================== SCORE DATAFRAME =========================================#
+    # # ==============================================================================================#
+    #
+    # scores = structural_info_df[['Target_id', "structure_info_score"]]
+    #
+    # # ==============================================================================================#
+    # # ============================= STRUCTURE DRUGGABILITY SCORE ===================================#
+    # # ==============================================================================================#
+    #
+    # structural_drug_cols = ["Target_id", "domain_tractable", "domain_druggable", "mean_druggability_score",
+    #                         "mean_alt_druggability_score", "mean_alt_similarity"]
+    # structural_drug_df = data[structural_drug_cols].copy()
+    # structural_drug_df['domain_drug_score'] = structural_drug_df[["domain_tractable", "domain_druggable"]].mean(axis=1)
+    # structural_drug_df['alt_drug_score'] = structural_drug_df.mean_alt_druggability_score * (
+    #         structural_drug_df.mean_alt_similarity / 100)
+    # structural_drug_df['structural_drug_score'] = structural_drug_df[
+    #     ['mean_druggability_score', 'domain_drug_score', 'alt_drug_score']].mean(axis=1)
+    #
+    # scores = scores.merge(structural_drug_df[['Target_id', 'structural_drug_score']], on='Target_id', how='left')
+    #
+    # # ==============================================================================================#
+    # # ================================== CHEMISTRY SCORE ===========================================#
+    # # ==============================================================================================#
+    #
+    # chemistry_cols = ["Target_id", "BindingDB_potent_count", "BindingDB_potent_phase2_count",
+    #                   "ChEMBL_bioactives_potent_count", "ChEMBL_bioactives_moderate_selectivity_count",
+    #                   "ChEMBL_bioactives_good_selectivity_count", "ChEMBL_bioactives_great_selectivity_count",
+    #                   "commercial_potent_total"]
+    # chemistry_df = data[chemistry_cols].copy()
+    # chemistry_df['bindingDB_potent'] = chemistry_df.BindingDB_potent_count > 0
+    # chemistry_df['bindingDB_phase2'] = chemistry_df.BindingDB_potent_phase2_count > 0
+    # chemistry_df['chembl_potent'] = chemistry_df.ChEMBL_bioactives_potent_count > 0
+    # chemistry_df['chembl_select_1'] = (np.where(chemistry_df.ChEMBL_bioactives_moderate_selectivity_count > 0, 1,
+    #                                             0) + np.where(chemistry_df.ChEMBL_bioactives_good_selectivity_count > 0,
+    #                                                           1, 0) + np.where(
+    #     chemistry_df.ChEMBL_bioactives_great_selectivity_count > 0, 1, 0)) / 3
+    # chemistry_df['commercial_potent'] = chemistry_df.commercial_potent_total > 0
+    #
+    # chemistry_df['chemistry_score'] = chemistry_df[
+    #     ['bindingDB_potent', 'bindingDB_phase2', 'chembl_potent', 'chembl_select_1', 'commercial_potent']].mean(axis=1)
+    #
+    # scores = scores.merge(chemistry_df[['Target_id', 'chemistry_score']], on='Target_id', how='left')
+    #
+    # # ==============================================================================================#
+    # # ==================================== BIOLOGY SCORE ===========================================#
+    # # ==============================================================================================#
+    #
+    # biology_cols = ['Target_id', 'EXP_LVL_AVG', 'Ab Count', 'variants_count', 'mutants_count', 'number_of_genotypes',
+    #                 'kegg_count', 'reactome_count']
+    # biology_df = data[biology_cols].copy()
+    # biology_df['EScore'] = np.where(biology_df.EXP_LVL_AVG > 0, 1, 0)
+    # biology_df['AScore'] = np.where(biology_df['Ab Count'] > 50, 1, 0)
+    # biology_df['VScore'] = np.where(biology_df.variants_count > 0, 1, 0)
+    # biology_df['MScore'] = np.where(biology_df.mutants_count > 0, 1, 0)
+    # biology_df['GScore'] = np.where(biology_df.number_of_genotypes > 0, 1, 0)
+    # biology_df['PScore'] = (np.where(biology_df.kegg_count > 0, 1, 0) + np.where(biology_df.reactome_count > 0, 1,
+    #                                                                              0)) / 2
+    # biology_df['biology_score'] = biology_df[['EScore', 'AScore', 'VScore', 'MScore', 'GScore', 'PScore']].mean(axis=1)
+    #
+    # scores = scores.merge(biology_df[['Target_id', 'biology_score']], on='Target_id', how='left')
+    #
+    # # ==============================================================================================#
+    # # =============================== DISEASE LINK SCORE ===========================================#
+    # # ==============================================================================================#
+    #
+    # disease_cols = ['Target_id', 'disease_count_uniprot', 'disease_count_tcrd', 'OT_number_of_disease_areas',
+    #                 'OT_max_association_score']
+    # disease_df = data[disease_cols].copy()
+    # disease_df['AScore'] = (np.where(disease_df.OT_number_of_disease_areas > 0, 1, 0) + np.where(
+    #     disease_df.OT_number_of_disease_areas > 1, 1, 0)) / 2
+    # disease_df['UScore'] = np.where(disease_df.disease_count_uniprot > 0, 1, 0)
+    # disease_df['TScore'] = np.where(disease_df.disease_count_tcrd > 0, 1, 0)
+    # disease_df['disease_score'] = (disease_df[
+    #                                    'OT_max_association_score'] * 2 + disease_df.AScore + disease_df.UScore + disease_df.TScore) / 5
+    #
+    # scores = scores.merge(disease_df[['Target_id', 'disease_score']], on='Target_id', how='left')
+    #
+    # # ==============================================================================================#
+    # # =============================== GENETIC LINK SCORE ===========================================#
+    # # ==============================================================================================#
+    #
+    # col_genetic = ['Target_id', 'gwas_count', 'OT_MAX_VAL_genetic_association', 'OT_NUM_MAX_genetic_association']
+    # genetic_df = data[col_genetic].copy()
+    # genetic_df['genetic_NORM'] = np.where(genetic_df.OT_NUM_MAX_genetic_association > 0, 0.5, 0) + np.where(
+    #     genetic_df.OT_NUM_MAX_genetic_association > 1, 0.25, 0) + np.where(
+    #     genetic_df.OT_NUM_MAX_genetic_association >= 5, 0.25, 0)
+    # genetic_df['GScore'] = np.where(genetic_df.gwas_count > 0, 0.5, 0) + np.where(genetic_df.gwas_count > 1, 0.5, 0)
+    # genetic_df['AScore'] = genetic_df.OT_MAX_VAL_genetic_association * genetic_df.genetic_NORM
+    # genetic_df['genetic_score'] = genetic_df.AScore
+    #
+    # scores = scores.merge(genetic_df[['Target_id', 'genetic_score']], on='Target_id', how='left')
+    #
+    # # ==============================================================================================#
+    # # ================================ INFORMATION SCORE ===========================================#
+    # # ==============================================================================================#
+    #
+    # col_info = ['Target_id', 'JensenLab PubMed Score']
+    # info_df = data[col_info].copy()
+    # info_df['information_score'] = np.where(info_df['JensenLab PubMed Score'] >= 100, 1,
+    #                                         info_df['JensenLab PubMed Score'] / 100)
+    #
+    # scores = scores.merge(info_df[['Target_id', 'information_score']], on='Target_id', how='left')
+    #
+    # # ==============================================================================================#
+    # # ================================== SAFETY SCORE ==============================================#
+    # # ==============================================================================================#
+    #
+    # col_safety = ['Target_id', 'Heart_alert', 'Liver_alert', 'Kidney_alert', 'number_of_genotypes',
+    #               'phenotypes_heterozygotes_lethal_count',
+    #               'phenotypes_homozygotes_lethal_count']
+    # safety_df = data[col_safety].copy()
+    # safety_df['GScore'] = (np.where(safety_df.phenotypes_homozygotes_lethal_count > 0,
+    #                                 np.where(safety_df.phenotypes_heterozygotes_lethal_count > 0, 2, 1),
+    #                                 np.where(safety_df.phenotypes_heterozygotes_lethal_count > 0, 2,
+    #                                          np.where(safety_df.number_of_genotypes.isna(), np.nan, 0)))) / 2
+    # safety_df['EScore'] = np.where(safety_df[['Heart_alert', 'Liver_alert', 'Kidney_alert']].any(axis=1), 1, np.where(
+    #     safety_df[['Heart_alert', 'Liver_alert', 'Kidney_alert']].isna().all(axis=1), np.nan, 0))
+    # safety_df['safety_score'] = safety_df[['GScore', 'EScore']].mean(axis=1)
+    #
+    # scores = scores.merge(safety_df[['Target_id', 'safety_score']], on='Target_id', how='left')
+    # scores = scores.fillna(0)
+    # # ==============================================================================================#
+    # # ==================================== MPO SCORE ===============================================#
+    # # ==============================================================================================#
+    #
+    # if mode == 'list':
+    #     window = Tk()
+    #     values = get_mpo_coeff(window)
+    #     window.mainloop()
+    #
+    #     coeff_df = values.coeff
+    #
+    #     scores[
+    #         'mpo_score'] = (scores.safety_score * coeff_df['safe'] + scores.information_score * coeff_df[
+    #         'info'] + scores.genetic_score * coeff_df['gen'] + scores.disease_score * coeff_df[
+    #                             'dise'] + scores.biology_score * coeff_df['bio'] + scores.chemistry_score * coeff_df[
+    #                             'chem'] + scores.structural_drug_score * coeff_df[
+    #                             'sdrug'] + scores.structure_info_score * coeff_df['sbio']) / sum(coeff_df.values())
+    # else:
+    #     scores['mpo_score'] = np.nan
+    #
+    # scores = scores.round(2)
+    # # ================================================================================================================#
+    # # ========================================= COMBINE ALL ==========================================================#
+    # # ================================================================================================================#
+    #
+    # data = data.merge(scores, on='Target_id', how='left')
     connector_targetDB.close()
     return data
 
