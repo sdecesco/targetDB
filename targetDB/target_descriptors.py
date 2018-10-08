@@ -285,6 +285,13 @@ def range_list(x):
     return longest
 
 
+def max_range(x,dx=0.1):
+    x.index = x.target_id
+    x = x.drop(['target_id'],axis=1)
+    x = x[(x >= (x.max() - dx)) & (x != 0)]
+    return x.count()
+
+
 def domain_ranges(x):
     out = []
     for y in x:
@@ -643,7 +650,7 @@ def get_descriptors_list(target_id, targetdb=None):
                      'somatic_mutation': 'OT_%_somatic_mutation'}).round(2)
         OT_diseases_associations_max_count = OT_diseases.drop(['disease_area', 'disease_name', 'overall_score'],
                                                               axis=1).groupby('target_id').apply(
-            lambda x: x[(x >= x.max() - 0.2) & (x != 0)].count()).reset_index().rename(
+            lambda x:max_range(x,dx=0.1)).reset_index().rename(
             columns={'target_id': 'Target_id',
                      'genetic_association': 'OT_NUM_MAX_genetic_association', 'known_drug': 'OT_NUM_MAX_known_drug',
                      'litterature_mining': 'OT_NUM_MAX_litterature_mining',
