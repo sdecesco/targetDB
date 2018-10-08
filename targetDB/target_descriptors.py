@@ -263,7 +263,7 @@ class target_scores:
                                                 safety_df[['Heart_alert', 'Liver_alert', 'Kidney_alert']].isna().all(
                                                     axis=1),
                                                 np.nan, 0))
-        safety_df['safety_score'] = safety_df[['safe_GScore', 'safe_EScore']].mean(axis=1)
+        safety_df['safety_score'] = 1-safety_df[['safe_GScore', 'safe_EScore']].mean(axis=1)
         safety_score_component = safety_df[
             ['Target_id','safe_GScore', 'safe_EScore', 'Heart_alert', 'Liver_alert', 'Kidney_alert']].copy()
         rep_dict = {'True': 1, 'False': 0}
@@ -1259,7 +1259,7 @@ def make_spider_plot(data, labels, target_name=''):
     N = len(data)
     bar_width = 2 * np.pi / N
     theta = np.arange(0, 2 * np.pi, 2 * np.pi / N)
-    colors = ['#95d0fc', '#0485d1', '#b790d4', '#87ae73', '#fec615', '#fb7d07', '#95a3a6', '#ff474c']
+    colors = ['#95d0fc', '#0485d1', '#b790d4', '#87ae73', '#fec615', '#fb7d07', '#95a3a6', '#ccff33']
     ax.bar(0, 1, bottom=9, width=2 * np.pi, color='r', linewidth=0, alpha=0.3)
     ax.bar(0, 5, bottom=4, width=2 * np.pi, color='lime', linewidth=0, alpha=0.2)
     ax.bar(0, 3, bottom=1, width=2 * np.pi, color='gold', linewidth=0, alpha=0.2)
@@ -1274,8 +1274,7 @@ def make_spider_plot(data, labels, target_name=''):
     ax.yaxis.grid(True)
     ax.xaxis.grid(False)
     fig.legend(loc=7, fontsize=14, fancybox=True, markerscale=1.2)
-    ax.set_yticks([2.5, 5, 7.5])
-    ax.set_yticklabels(['', '', ''])
+    ax.set_yticks([])
 
     buf = io.BytesIO()
     fig.savefig(buf, format='png')
