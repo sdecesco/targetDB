@@ -798,18 +798,24 @@ def get_descriptors_list(target_id, targetdb=None):
         tissue_avg['Kidney_value'] = np.nan
         for tid in tissue_avg.index:
             avg_exp_1stddev = tissue_avg.loc[tid].EXP_LVL_AVG + tissue_avg.loc[tid].EXP_LVL_STDDEV
-            if cell_values.loc[(tid, 'Kidney', 'kidney')].value > avg_exp_1stddev or cell_values.loc[
-                (tid, 'Kidney', 'kidney')].value == 3:
-                tissue_avg.loc[tid, ['Kidney_alert']] = True
-                tissue_avg.loc[tid, ['Kidney_value']] = cell_values.loc[(tid, 'Kidney', 'kidney')].value
-            if cell_values.loc[(tid, 'Liver_gallbladder', 'liver')].value > avg_exp_1stddev or cell_values.loc[
-                (tid, 'Liver_gallbladder', 'liver')].value == 3:
-                tissue_avg.loc[tid, ['Liver_alert']] = True
-                tissue_avg.loc[tid, ['Liver_value']] = cell_values.loc[(tid, 'Liver_gallbladder', 'liver')].value
-            if cell_values.loc[(tid, 'Muscle_tissue', 'heart muscle')].value > avg_exp_1stddev or cell_values.loc[
-                (tid, 'Muscle_tissue', 'heart muscle')].value == 3:
-                tissue_avg.loc[tid, ['Heart_alert']] = True
-                tissue_avg.loc[tid, ['Heart_value']] = cell_values.loc[(tid, 'Muscle_tissue', 'heart muscle')].value
+            try:
+                if cell_values.loc[(tid, 'Kidney', 'kidney')].value > avg_exp_1stddev or cell_values.loc[(tid, 'Kidney', 'kidney')].value == 3:
+                    tissue_avg.loc[tid, ['Kidney_alert']] = True
+                    tissue_avg.loc[tid, ['Kidney_value']] = cell_values.loc[(tid, 'Kidney', 'kidney')].value
+            except KeyError:
+                pass
+            try:
+                if cell_values.loc[(tid, 'Liver_gallbladder', 'liver')].value > avg_exp_1stddev or cell_values.loc[(tid, 'Liver_gallbladder', 'liver')].value == 3:
+                    tissue_avg.loc[tid, ['Liver_alert']] = True
+                    tissue_avg.loc[tid, ['Liver_value']] = cell_values.loc[(tid, 'Liver_gallbladder', 'liver')].value
+            except KeyError:
+                pass
+            try:
+                if cell_values.loc[(tid, 'Muscle_tissue', 'heart muscle')].value > avg_exp_1stddev or cell_values.loc[(tid, 'Muscle_tissue', 'heart muscle')].value == 3:
+                    tissue_avg.loc[tid, ['Heart_alert']] = True
+                    tissue_avg.loc[tid, ['Heart_value']] = cell_values.loc[(tid, 'Muscle_tissue', 'heart muscle')].value
+            except KeyError:
+                pass
         tissue_avg.reset_index(drop=True, inplace=True)
         tissue_max = tissue_grouped.loc[tissue_grouped.groupby('Target_id').idxmax()['value']].rename(
             columns={'organ': 'tissue_max_expression', 'value': 'expression_max_tissue'})
