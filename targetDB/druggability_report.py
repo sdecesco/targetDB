@@ -663,7 +663,7 @@ def get_single_excel(target):
                 w_eff.conditional_format(CNS_MPO_col + (str(len(res['efficacy_bio']) + 3)),
                                          {'type': 'icon_set', 'icon_style': '3_traffic_lights'
                                              , 'icons': CNS_MPO_criteria})
-                row_efficacy = len(res['efficacy_bio']) + len(res['efficacy_bio'].columns.levels) + 1
+                row_efficacy = len(res['efficacy_bio']) + len(res['efficacy_bio'].columns) + 1
             else:
                 row_efficacy = 0
             if not res['emax'].empty:
