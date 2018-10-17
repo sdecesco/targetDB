@@ -17,6 +17,7 @@ from targetDB import target_features as tf
 from targetDB.utils import config as cf
 from targetDB.utils import retryers as ret
 from targetDB.utils import gene2id as g2id
+from targetDB.utils import druggability_ml as dml
 
 
 def get_list_entries():
@@ -246,8 +247,8 @@ def get_single_excel(target):
                             wb_general_info.write(row, col, v, v_center)
 
                 target_desc = td.get_descriptors_list(uniprot_id, targetdb=targetDB)
-                tscore = td.target_scores(target_desc,mode='single')
-                target_desc = target_desc.merge(tscore.scores,on='Target_id',how='left')
+                tscore = td.target_scores(target_desc, mode='single')
+                target_desc = target_desc.merge(tscore.scores, on='Target_id', how='left')
                 score_col = ['structure_info_score', 'structural_drug_score', 'chemistry_score', 'biology_score',
                              'disease_score', 'genetic_score', 'information_score', 'safety_score']
                 target_score = target_desc[score_col] * 10
@@ -786,7 +787,13 @@ def get_list_excel(list_targets):
 
     data = td.get_descriptors_list(gene_ids, targetdb=targetDB)
     tscore = td.target_scores(data)
-    data = data.merge(tscore.scores,on='Target_id',how='left')
+    ml_model = dml.generate_model()
+    druggability_pred = dml.predict(ml_model, tscore.score_components)
+    drug_proba = pd.DataFrame(dml.predict_prob(ml_model, tscore.score_components), columns=ml_model.classes_)
+    tscore.scores['Tractable'] = druggability_pred
+    tscore.scores['Tractability_probability'] = round(drug_proba[1] * 100, 2)
+    tscore.scores['Druggable'] = tscore.scores['Druggable'].replace({0: False, 1: True})
+    data = data.merge(tscore.scores, on='Target_id', how='left')
     data = data.merge(pubmed, on='Target_id', how='left')
     list_done = data.Target_id.values.tolist()
 
@@ -803,7 +810,7 @@ def get_list_excel(list_targets):
     workbook = writer.book
 
     col_order = ["Target_id", "Gene_name", "Pharos_class", "protein_family", "protein_family_detail", "Number_isoforms",
-                 'mpo_score','structure_info_score', 'structural_drug_score',
+                 'mpo_score', 'Tractable', 'Tractability_probability', 'structure_info_score', 'structural_drug_score',
                  'chemistry_score', 'biology_score', 'disease_score', 'genetic_score',
                  'information_score', 'safety_score',
                  "EBI Total Patent Count", "JensenLab PubMed Score", "NCBI Gene PubMed Count", "PubTator Score",
@@ -843,9 +850,25 @@ def get_list_excel(list_targets):
     data = data[col_order]
     data.to_excel(writer, sheet_name='Druggability_list', index=False, startrow=1)
 
-    header_groups = {'GENERAL INFO': (0, 5), 'SCORES': (6, 14), 'LITTERATURE/PATENT INFORMATION': (15, 24),
-                     'BIOLOGY': (25, 58),
-                     'PATHWAYS AND DISEASES': (59, 95), 'STRUCTURAL INFORMATION': (96, 124), 'CHEMISTRY': (125, 134)}
+    gen_info_len = 6
+    score_len = 11
+    litt_len = 10
+    bio_len = 34
+    pathways_len = 37
+    structure_len = 29
+    chemistry_len = 10
+
+    header_groups = {'GENERAL INFO': (0, gen_info_len - 1), 'SCORES': (gen_info_len, gen_info_len + score_len - 1),
+                     'LITTERATURE/PATENT INFORMATION': (
+                     gen_info_len + score_len, gen_info_len + score_len + litt_len - 1),
+                     'BIOLOGY': (
+                     gen_info_len + score_len + litt_len, gen_info_len + score_len + litt_len + bio_len - 1),
+                     'PATHWAYS AND DISEASES': (gen_info_len + score_len + litt_len + bio_len,
+                                               gen_info_len + score_len + litt_len + bio_len + pathways_len - 1),
+                     'STRUCTURAL INFORMATION': (gen_info_len + score_len + litt_len + bio_len + pathways_len,
+                                                gen_info_len + score_len + litt_len + bio_len + pathways_len + structure_len - 1),
+                     'CHEMISTRY': (gen_info_len + score_len + litt_len + bio_len + pathways_len + structure_len,
+                                   gen_info_len + score_len + litt_len + bio_len + pathways_len + structure_len + chemistry_len - 1)}
     color_dict = {'GENERAL INFO': '#fde9d9', 'SCORES': '#ffff99', 'LITTERATURE/PATENT INFORMATION': '#d9d9d9',
                   'BIOLOGY': '#ebf1de',
                   'PATHWAYS AND DISEASES': '#f2dcdb', 'STRUCTURAL INFORMATION': '#dce6f1', 'CHEMISTRY': '#e4dfec'}
