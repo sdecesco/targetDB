@@ -338,6 +338,7 @@ def get_single_features(target_id, dbase=None):
 	connector.close()
 	return results
 
+
 def transform_bioactivities(results, dbase):
 	if results.empty:
 		return {'binding': pd.DataFrame(), 'dose_response': pd.DataFrame(), 'other': pd.DataFrame(),
