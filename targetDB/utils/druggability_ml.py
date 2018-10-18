@@ -60,3 +60,19 @@ def predict_prob(model, data):
                    'gen_GScore', 'bio_AScore', 'safe_EScore']
     df = df[col_to_keep]
     return model.predict_proba(df)
+
+
+def in_training_set(data):
+
+    pck_path = Path(str(pkg_resources.resource_filename('targetDB.utils', ''))).parent
+    ml_data = pck_path.joinpath('ml_data')
+    ml_data = ml_data.joinpath('ml_training_data.zip')
+
+    training_df = pd.read_json(ml_data, compression='zip')
+
+    df = data.copy()
+    df.index = df.Target_id
+
+    df['Is_in_training_set'] = 'No'
+    df.loc[df.index.isin(training_df.index),['Is_in_training_set']] = 'Yes'
+    return df['Is_in_training_set'].values

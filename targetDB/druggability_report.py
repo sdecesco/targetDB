@@ -19,6 +19,8 @@ from targetDB.utils import retryers as ret
 from targetDB.utils import gene2id as g2id
 from targetDB.utils import druggability_ml as dml
 
+ml_model = dml.generate_model()
+
 
 def get_list_entries():
     connector = sqlite3.connect(targetDB)
@@ -162,6 +164,8 @@ def get_single_excel(target):
                 {'bold': True, 'bg_color': '#FF9E9E', 'align': 'center', 'valign': 'vcenter'})
             wrap = workbook.add_format({'text_wrap': True, 'valign': 'vcenter'})
             v_center = workbook.add_format({'valign': 'vcenter'})
+            hv_center = workbook.add_format({'valign': 'vcenter','align': 'center'})
+            left_v_center = workbook.add_format({'valign': 'vcenter', 'align': 'left'})
             link = workbook.add_format(
                 {'bold': True, 'valign': 'vcenter', 'align': 'center', 'color': 'blue', 'underline': True})
 
@@ -223,7 +227,8 @@ def get_single_excel(target):
             # GENERAL INFO HEADER WRITING
             header_index = {'Gene_name': (0, 0), 'Synonyms': (1, 0), 'Target_id': (2, 0), 'Protein_class': (3, 0),
                             'Protein_class_desc': (4, 0), 'Species': (5, 0), 'Number_isoforms': (6, 0),
-                            'Sequence': (0, 3), 'Cell_location': (0, 4), 'DISEASE': (8, 0, 8, 1), 'disease_id': (9, 0),
+                            'Tractable': (0, 3), 'Tractability_probability': (0, 4),
+                            'In Training data set ?': (2, 3, 2, 4), 'DISEASE': (8, 0, 8, 1), 'disease_id': (9, 0),
                             'disease_name': (9, 1), 'PATHWAYS': (8, 3, 8, 4), 'Reactome': (9, 3), 'KEGG': (9, 4)}
             write_excel_header(header_index, wb_general_info, col_header)
 
@@ -232,22 +237,18 @@ def get_single_excel(target):
                 for k, v in res['general_info'].iloc[0].items():
                     if k in header_index:
                         row, col = header_index[k]
-                        if k == 'Sequence' or k == 'Cell_location':
-                            if k == 'Sequence':
-                                sequence = v
-                            row = row + 1
-                            last_row = row + 5
-                            wb_general_info.merge_range(row, col, last_row, col, v, v_center)
-                        elif k == 'Number_isoforms':
-                            col = col + 1
-                            wb_general_info.write_url(row, col, "internal:isoforms", link)
-                            wb_general_info.write(row, col, v, link)
-                        else:
-                            col = col + 1
-                            wb_general_info.write(row, col, v, v_center)
+                        col = col + 1
+                        wb_general_info.write(row, col, v, left_v_center)
 
                 target_desc = td.get_descriptors_list(uniprot_id, targetdb=targetDB)
                 tscore = td.target_scores(target_desc, mode='single')
+                druggability_pred = dml.predict(ml_model, tscore.score_components)
+                drug_proba = pd.DataFrame(dml.predict_prob(ml_model, tscore.score_components),
+                                          columns=ml_model.classes_)
+                tscore.scores['Tractable'] = druggability_pred
+                tscore.scores['Tractability_probability'] = round(drug_proba[1] * 100, 2)
+                tscore.scores['Tractable'] = tscore.scores['Tractable'].replace({0: 'False', 1: 'True'})
+                tscore.scores['In_training_set'] = dml.in_training_set(tscore.score_components)
                 target_desc = target_desc.merge(tscore.scores, on='Target_id', how='left')
                 score_col = ['structure_info_score', 'structural_drug_score', 'chemistry_score', 'biology_score',
                              'disease_score', 'genetic_score', 'information_score', 'safety_score']
@@ -264,6 +265,10 @@ def get_single_excel(target):
                 spider_plot = td.make_spider_plot(target_score.loc[uniprot_id].values, target_score.columns,
                                                   target_name=res['general_info'].iloc[0]['Gene_name'])
                 wb_general_info.insert_image('G1', 'spider_plot', {'image_data': spider_plot})
+
+                wb_general_info.write(1, 3, target_desc['Tractable'].iloc[0], hv_center)
+                wb_general_info.write(1, 4, target_desc['Tractability_probability'].iloc[0], hv_center)
+                wb_general_info.merge_range(3, 3, 3, 4, target_desc['In_training_set'].iloc[0], hv_center)
 
             if not res['disease'].empty:
                 for i in range(len(res['disease'])):
@@ -787,12 +792,12 @@ def get_list_excel(list_targets):
 
     data = td.get_descriptors_list(gene_ids, targetdb=targetDB)
     tscore = td.target_scores(data)
-    ml_model = dml.generate_model()
     druggability_pred = dml.predict(ml_model, tscore.score_components)
     drug_proba = pd.DataFrame(dml.predict_prob(ml_model, tscore.score_components), columns=ml_model.classes_)
     tscore.scores['Tractable'] = druggability_pred
     tscore.scores['Tractability_probability'] = round(drug_proba[1] * 100, 2)
-    tscore.scores['Druggable'] = tscore.scores['Druggable'].replace({0: False, 1: True})
+    tscore.scores['Tractable'] = tscore.scores['Tractable'].replace({0: False, 1: True})
+    tscore.scores['In_training_set'] = dml.in_training_set(tscore.score_components)
     data = data.merge(tscore.scores, on='Target_id', how='left')
     data = data.merge(pubmed, on='Target_id', how='left')
     list_done = data.Target_id.values.tolist()
@@ -810,7 +815,8 @@ def get_list_excel(list_targets):
     workbook = writer.book
 
     col_order = ["Target_id", "Gene_name", "Pharos_class", "protein_family", "protein_family_detail", "Number_isoforms",
-                 'mpo_score', 'Tractable', 'Tractability_probability', 'structure_info_score', 'structural_drug_score',
+                 'mpo_score', 'Tractable', 'Tractability_probability', 'In_training_set', 'structure_info_score',
+                 'structural_drug_score',
                  'chemistry_score', 'biology_score', 'disease_score', 'genetic_score',
                  'information_score', 'safety_score',
                  "EBI Total Patent Count", "JensenLab PubMed Score", "NCBI Gene PubMed Count", "PubTator Score",
@@ -851,14 +857,15 @@ def get_list_excel(list_targets):
     data.to_excel(writer, sheet_name='Druggability_list', index=False, startrow=1)
 
     gen_info_len = 6
-    score_len = 11
+    score_len = 12
     litt_len = 10
     bio_len = 34
     pathways_len = 37
     structure_len = 29
     chemistry_len = 10
 
-    header_groups = {'GENERAL INFO': (0, gen_info_len - 1), 'SCORES': (gen_info_len, gen_info_len + score_len - 1),
+    header_groups = {'GENERAL INFO': (0, gen_info_len - 1),
+                     'SCORES': (gen_info_len, gen_info_len + score_len - 1),
                      'LITTERATURE/PATENT INFORMATION': (
                      gen_info_len + score_len, gen_info_len + score_len + litt_len - 1),
                      'BIOLOGY': (
