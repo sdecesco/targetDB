@@ -43,7 +43,7 @@ You can download a copy of the database [HERE](https://github.com/sdecesco/targe
 The list of required databases is :
 + ChEMBL v24
 
-ChEMBL sqlite database can be directly downloaded [HERE](ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/chembl_24_1_sqlite.tar.gz)
+ChEMBL sqlite database can be directly downloaded [HERE](ftp://ftp.ebi.ac.uk/pub/databases/chembl/ChEMBLdb/latest/)
 
 >This mode will generate a targetDB database that can then be used in report mode
 
