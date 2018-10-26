@@ -75,13 +75,14 @@ class get_mpo_coeff:
                             font='bold', fg='white')
         self.safety.set(50)
         self.safety.grid(row=3, column=7, sticky=W + E)
+        self.over = False
 
     def get_values(self):
         self.coeff = {'sbio': self.structural_info.get() / 100, 'sdrug': self.structural_drug.get() / 100,
                       'chem': self.chemistry.get() / 100, 'bio': self.biology.get() / 100,
                       'dise': self.disease.get() / 100, 'gen': self.genetic.get() / 100,
                       'info': self.information.get() / 100, 'safe': self.safety.get() / 100}
-        self.master.destroy()
+        self.over = True
 
 
 class target_scores:
@@ -109,9 +110,14 @@ class target_scores:
 
     def get_mpo_score(self):
         if self.mode == 'list':
-            window = Tk()
-            values = get_mpo_coeff(window)
-            window.mainloop()
+            coeff_window = Toplevel()
+            values = get_mpo_coeff(coeff_window)
+
+            while True:
+                coeff_window.update()
+                if values.over:
+                    coeff_window.destroy()
+                    break
 
             coeff_df = values.coeff
 

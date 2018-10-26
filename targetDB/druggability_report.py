@@ -18,6 +18,7 @@ from targetDB.utils import config as cf
 from targetDB.utils import retryers as ret
 from targetDB.utils import gene2id as g2id
 from targetDB.utils import druggability_ml as dml
+from targetDB.utils import targetDB_gui as tgui
 
 ml_model = dml.generate_model()
 
@@ -452,7 +453,7 @@ def get_single_excel(target):
                 mod_header = {'start': 0, 'stop': 1, 'previous_seq': 2, 'modification_type': 3, 'new_seq': 4,
                               'in_domains': 5, 'comments': 6}
                 row_to_hide = []
-                res['isoforms'] = res['isoforms'].sort_values(by='similarity', ascending=False)
+                #res['isoforms'] = res['isoforms'].sort_values(by='similarity', ascending=False)
                 for iso in res['isoforms'].to_dict(orient='records'):
                     wb_isoforms.merge_range(row, 0, row, 6, iso['isoform_name'], col_header)
                     row += 1
@@ -938,6 +939,53 @@ def parse_args():
     return args
 
 
+def get_global_param():
+    global output_lists_path, output_single_path, targetDB, pubmed_email, list_of_entries
+
+    while True:
+        config = configparser.ConfigParser()
+        config_file_path = Path('~/.druggability/config.ini').expanduser()
+        config_file_path.parent.mkdir(exist_ok=True, parents=True)
+
+        if config_file_path.is_file():
+            config.read(str(config_file_path))
+            todo = []
+            for var_name in config['database_path']:
+                if var_name in ['chembl']:
+                    continue
+                if not Path(config['database_path'][var_name]).is_file():
+                    todo.append(var_name)
+            for var_name in config['output_path']:
+                if var_name in ['db_files']:
+                    continue
+                if not Path(config['output_path'][var_name]).is_dir() or config['output_path'][var_name] == '':
+                    todo.append(var_name)
+            if not cf.is_email(config['pubmed_email']['email']):
+                todo.append('email')
+            if todo:
+                config = cf.get_config_from_user(config, todo=todo)
+                with config_file_path.open(mode='w') as cfile:
+                    config.write(cfile)
+            else:
+                # =============================# PATH TO SAVE REPORT FILES #============================#
+                output_lists_path = config['output_path']['list']
+                output_single_path = config['output_path']['single']
+                # =============================# PATH TO SQLITE DB #============================#
+
+                targetDB = config['database_path']['targetdb']
+                pubmed_email = config['pubmed_email']['email']
+                break
+        else:
+            config = cf.get_config_from_user(config, todo=['list', 'single', 'targetdb', 'email'], new=True)
+            with config_file_path.open(mode='w') as cfile:
+                config.write(cfile)
+    list_of_entries = get_list_entries()
+
+
+def main_gui():
+    targetDB_gui = tgui.targetDB_gui()
+
+
 def main():
     global output_lists_path, output_single_path, targetDB, pubmed_email, list_of_entries
     args = parse_args()
@@ -1007,6 +1055,10 @@ def main():
             get_single_excel(gene_df.loc[gene_name])
     elif args.report_list:
         get_list_excel(gene_df)
+
+
+def entry_point_gui():
+    main_gui()
 
 
 def entry_point():
