@@ -824,7 +824,7 @@ def create_db():
 
 def fill_db(path_to_datafiles,connector):
 	for f in path_to_datafiles.iterdir():
-		df = pd.read_pickle(str(f))
+		df = pd.read_json(str(f))
 		table_name = '_'.join(f.name.split('_')[:-3])
 		print('[DATABASE]: Filling the table ',table_name)
 		df.to_sql(table_name, con=connector, if_exists='append', index=False)

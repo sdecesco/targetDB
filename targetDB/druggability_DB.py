@@ -1514,6 +1514,7 @@ def parse_args():
 	parser.add_argument('-i', '--in_file', help='Name of the input file with a list of genes (.txt - 1 gene per line)',
 	                    metavar='')
 	parser.add_argument('-l', '--list_genes', help='Enter a list of gene name separated by a ","', metavar='')
+	parser.add_argument('-a', '--do_all', help='Use this option to create a database with all human genes (list coming from HGNC)', action='store_true', default=False)
 	parser.add_argument('-s', '--sphere_size', help='enter a value for the probe size of the pocket finder tool ('
 	                                                'default = 3.0)', metavar='', type=float, default=3.0)
 	parser.add_argument('-v', '--verbose', help="Print information", action='store_true', default=False)
@@ -1529,8 +1530,8 @@ def parse_args():
 	                    action='store_true', default=False)
 
 	arguments = parser.parse_args()
-	if not arguments.gene and not arguments.in_file and not arguments.list_genes:
-		print('[ERROR]: Please use one of the optional input options : -g / -i / -l ')
+	if not arguments.gene and not arguments.in_file and not arguments.list_genes and not arguments.do_all:
+		print('[ERROR]: Please use one of the optional input options : -g / -i / -l / -a')
 		parser.print_help()
 		sys.exit()
 	return arguments
@@ -1612,6 +1613,9 @@ def main():
 		elif args.list_genes:
 			list_of_genes = args.list_genes.split(',')
 			gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
+			break
+		elif args.do_all:
+			gene_df = g2id.gene_to_id_all(targetDB_path=targetDB)
 			break
 
 	for g_id in gene_df.index:
