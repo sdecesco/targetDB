@@ -124,11 +124,12 @@ class targetDB_gui:
             for gene_name in self.gene_df.index:
                 dr.get_single_excel(self.gene_df.loc[gene_name])
         if mode == 'spider':
-            top_spider = tk.Toplevel()
-            top_spider.geometry("600x800")
-            top_spider.resizable(False, True)
+            self.top_spider = tk.Toplevel(self.window)
+            self.top_spider.protocol("WM_DELETE_WINDOW", self.closing_top)
+            self.top_spider.geometry("600x800")
+            self.top_spider.resizable(False, True)
 
-            spider_window = ScrolledFrame(top_spider)
+            spider_window = ScrolledFrame(self.top_spider)
             spider_window.pack(expand=True, fill='both')
 
             for gene_name in self.gene_df.index:
@@ -154,6 +155,10 @@ class targetDB_gui:
                 canvas = FigureCanvasTkAgg(self.spider_plot, master=spider_window.inner)
                 canvas.get_tk_widget().pack(expand=True, fill='both')
                 plt.close(self.spider_plot)
+            self.window.wait_window(self.top_spider)
+
+    def closing_top(self):
+        self.top_spider.destroy()
 
     def make_spider_plot(self, data, labels, target_name=''):
         fig = plt.figure(figsize=(4, 3))

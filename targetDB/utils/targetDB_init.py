@@ -376,24 +376,6 @@ on drugEbility_sites (pdb_code);
 create index idx_drugEbility_sites_drugEbility_sites_px_number_index
 on drugEbility_sites (px_number);
 
-DROP TABLE IF EXISTS ensembl;
-CREATE TABLE IF NOT EXISTS ensembl
-(
-ensembl_gene varchar(50) default NULL,
-uniprot_id   varchar(20) default NULL,
-gene_name    varchar(50) default NULL,
-gene_symbol  varchar(50) default NULL
-);
-
-create index idx_ensembl_ensembl_ensembl_gene_index
-on ensembl (ensembl_gene);
-
-create index idx_ensembl_ensembl_gene_symbol_index
-on ensembl (gene_symbol);
-
-create index idx_ensembl_ensembl_uniprot_id_index
-on ensembl (uniprot_id);
-
 DROP TABLE IF EXISTS fPockets;
 CREATE TABLE IF NOT EXISTS fPockets
 (
