@@ -13,7 +13,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/sdecesco/targetDB",
     packages=setuptools.find_packages(),
-    package_data={'targetDB': ['data/*.zip', 'ml_data/*.zip', 'LICENSE']}
+    package_data={'targetDB': ['data/*.zip','data/*.bz2', 'ml_data/*.zip', 'LICENSE']}
     , classifiers=(
     "Programming Language :: Python :: 3", "Development Status :: 4 - Beta", "Intended Audience :: Science/Research",
     "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
