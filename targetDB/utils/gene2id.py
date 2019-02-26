@@ -53,6 +53,7 @@ def gene_to_id_all(targetDB_path=None):
 	                               aggfunc=lambda x: ';'.join(x), fill_value='')
 	xref_piv = xref_piv.replace('', np.nan)
 	xref_piv = xref_piv.dropna(subset=['uniprot_ids'])
+	xref_piv = xref_piv.replace(np.nan,'')
 	for col in required_columns:
 		if col not in xref_piv.columns:
 			xref_piv[col] = ''
