@@ -140,6 +140,7 @@ def write_excel_header(header_dict, worksheet, format):
 
 
 def get_single_excel(target):
+    message = ''
     for uniprot_id in target.uniprot_ids:
         if uniprot_id in list_of_entries.index:
             output_name = Path(output_single_path).joinpath(target.symbol + '_' + uniprot_id + '.xlsx')
@@ -165,7 +166,7 @@ def get_single_excel(target):
                 {'bold': True, 'bg_color': '#FF9E9E', 'align': 'center', 'valign': 'vcenter'})
             wrap = workbook.add_format({'text_wrap': True, 'valign': 'vcenter'})
             v_center = workbook.add_format({'valign': 'vcenter'})
-            hv_center = workbook.add_format({'valign': 'vcenter','align': 'center'})
+            hv_center = workbook.add_format({'valign': 'vcenter', 'align': 'center'})
             left_v_center = workbook.add_format({'valign': 'vcenter', 'align': 'left'})
             link = workbook.add_format(
                 {'bold': True, 'valign': 'vcenter', 'align': 'center', 'color': 'blue', 'underline': True})
@@ -453,7 +454,7 @@ def get_single_excel(target):
                 mod_header = {'start': 0, 'stop': 1, 'previous_seq': 2, 'modification_type': 3, 'new_seq': 4,
                               'in_domains': 5, 'comments': 6}
                 row_to_hide = []
-                #res['isoforms'] = res['isoforms'].sort_values(by='similarity', ascending=False)
+                # res['isoforms'] = res['isoforms'].sort_values(by='similarity', ascending=False)
                 for iso in res['isoforms'].to_dict(orient='records'):
                     wb_isoforms.merge_range(row, 0, row, 6, iso['isoform_name'], col_header)
                     row += 1
@@ -568,19 +569,23 @@ def get_single_excel(target):
                     col_orig = col_orig + 2
                 row = 0
                 wb_struct.merge_range(row, col_orig, row, col_orig + 7, 'PDB', col_header)
-                wb_struct.merge_range(row, col_orig + 8, row, col_orig + 14, 'PDB: Ligand', col_header)
-                wb_struct.merge_range(row, col_orig + 15, row, col_orig + 16, 'ChEMBL - DruggEbillity', col_header)
+                wb_struct.merge_range(row, col_orig + 8, row, col_orig + 15, 'PDB: Ligand', col_header)
+                wb_struct.merge_range(row, col_orig + 16, row, col_orig + 17, 'ChEMBL - DruggEbillity', col_header)
                 row += 1
 
                 pdb = res['pdb'].copy()
                 pdb['% of full protein'] = round((pdb['n_residues'] / len(sequence)) * 100, 1)
                 pdb.operator = ' ' + pdb.operator
+                pdb['PDBbind_link'] = pdb['PDB_code'].apply(
+                    lambda x: '=HYPERLINK("http://www.pdbbind.org.cn/quickpdb.asp?quickpdb=' + x + '","' + x + '")')
+                pdb.loc[pdb['type_of_binder'].isna() | (pdb['type_of_binder'] == ''),'PDBbind_link'] = ''
                 col_order = ['PDB_code', 'Technique', 'Resolution', 'Chain', 'Domain_name',
                              'n_residues', '% of full protein', 'start_stop', 'type_of_binder', 'binding_type',
                              'operator',
                              'value', 'units',
-                             'Ligand_name', 'publication_year', 'SITES_tractable', 'SITES_druggable']
+                             'Ligand_name', 'publication_year', 'PDBbind_link', 'SITES_tractable', 'SITES_druggable']
                 pdb = pdb[col_order]
+
                 pdb.to_excel(writer, sheet_name='Structure', startrow=row, startcol=col_orig, index=False)
                 for col_num, value in enumerate(pdb.columns.values):
                     wb_struct.write(row, col_num + col_orig, value, vert_col_header)
@@ -761,9 +766,13 @@ def get_single_excel(target):
             # ======================== CLOSING FILE ==================================#
             workbook.close()
             print('[FILE]: File for ', target.symbol, ' generated [', output_name, ']')
+            message += '[FILE]: File for ' + target.symbol + ' generated [' + str(output_name)+ ']\n'
         else:
             return print("Gene named ", target.symbol, " with ID [", uniprot_id,
-                         '] not present in the database. Run the druggability_DB command to run the analysis on it')
+                         '] not present in the database. Run the target_DB command to run the analysis on it')
+
+    return message
+
 
 
 def get_list_excel(list_targets):
@@ -815,7 +824,8 @@ def get_list_excel(list_targets):
     writer = pd.ExcelWriter(str(output_file_name), engine='xlsxwriter')
     workbook = writer.book
 
-    col_order = ["Target_id", "Gene_name", "Pharos_class", "protein_family", "protein_family_detail", "Number_isoforms",
+    col_order = ["Target_id", "Gene_name", "Synonyms", "Pharos_class", "protein_family", "protein_family_detail",
+                 "Number_isoforms",
                  'mpo_score', 'Tractable', 'Tractability_probability', 'In_training_set', 'structure_info_score',
                  'structural_drug_score',
                  'chemistry_score', 'biology_score', 'disease_score', 'genetic_score',
@@ -855,9 +865,10 @@ def get_list_excel(list_targets):
                  "commercial_total", "commercial_potent_total"]
 
     data = data[col_order]
+    data.sort_values("mpo_score", axis=0, ascending=False, inplace=True, na_position='last')
     data.to_excel(writer, sheet_name='Druggability_list', index=False, startrow=1)
 
-    gen_info_len = 6
+    gen_info_len = 7
     score_len = 12
     litt_len = 10
     bio_len = 34
@@ -868,9 +879,9 @@ def get_list_excel(list_targets):
     header_groups = {'GENERAL INFO': (0, gen_info_len - 1),
                      'SCORES': (gen_info_len, gen_info_len + score_len - 1),
                      'LITTERATURE/PATENT INFORMATION': (
-                     gen_info_len + score_len, gen_info_len + score_len + litt_len - 1),
+                         gen_info_len + score_len, gen_info_len + score_len + litt_len - 1),
                      'BIOLOGY': (
-                     gen_info_len + score_len + litt_len, gen_info_len + score_len + litt_len + bio_len - 1),
+                         gen_info_len + score_len + litt_len, gen_info_len + score_len + litt_len + bio_len - 1),
                      'PATHWAYS AND DISEASES': (gen_info_len + score_len + litt_len + bio_len,
                                                gen_info_len + score_len + litt_len + bio_len + pathways_len - 1),
                      'STRUCTURAL INFORMATION': (gen_info_len + score_len + litt_len + bio_len + pathways_len,
@@ -901,6 +912,7 @@ def get_list_excel(list_targets):
     not_in_db.to_excel(writer, 'Not in DB', index=False)
     writer.save()
     print("[EXPORT]: Excel file: ", '[Export_' + str(len(data)) + '_entries_' + t + '.xlsx]', ' successfully generated')
+    tgui.info_message('Excel file: ' + '[Export_' + str(len(data)) + '_entries_' + t + '.xlsx] successfully generated')
     return "Success"
 
 
@@ -942,43 +954,19 @@ def parse_args():
 def get_global_param():
     global output_lists_path, output_single_path, targetDB, pubmed_email, list_of_entries
 
-    while True:
-        config = configparser.ConfigParser()
-        config_file_path = Path('~/.druggability/config.ini').expanduser()
-        config_file_path.parent.mkdir(exist_ok=True, parents=True)
+    parameters = tgui.config_gui(get_only=True)
 
-        if config_file_path.is_file():
-            config.read(str(config_file_path))
-            todo = []
-            for var_name in config['database_path']:
-                if var_name in ['chembl']:
-                    continue
-                if not Path(config['database_path'][var_name]).is_file():
-                    todo.append(var_name)
-            for var_name in config['output_path']:
-                if var_name in ['db_files']:
-                    continue
-                if not Path(config['output_path'][var_name]).is_dir() or config['output_path'][var_name] == '':
-                    todo.append(var_name)
-            if not cf.is_email(config['pubmed_email']['email']):
-                todo.append('email')
-            if todo:
-                config = cf.get_config_from_user(config, todo=todo)
-                with config_file_path.open(mode='w') as cfile:
-                    config.write(cfile)
-            else:
-                # =============================# PATH TO SAVE REPORT FILES #============================#
-                output_lists_path = config['output_path']['list']
-                output_single_path = config['output_path']['single']
-                # =============================# PATH TO SQLITE DB #============================#
+    if not parameters.config_file_path.is_file():
+        tgui.error('Parameters file not found\n Program is now closing')
+        sys.exit()
+    # =============================# PATH TO SAVE REPORT FILES #============================#
+    output_lists_path = parameters.config['output_path']['list']
+    output_single_path = parameters.config['output_path']['single']
+    # =============================# PATH TO SQLITE DB #============================#
 
-                targetDB = config['database_path']['targetdb']
-                pubmed_email = config['pubmed_email']['email']
-                break
-        else:
-            config = cf.get_config_from_user(config, todo=['list', 'single', 'targetdb', 'email'], new=True)
-            with config_file_path.open(mode='w') as cfile:
-                config.write(cfile)
+    targetDB = parameters.config['database_path']['targetdb']
+    pubmed_email = parameters.config['pubmed_email']['email']
+
     list_of_entries = get_list_entries()
 
 
@@ -992,7 +980,7 @@ def main():
     update_config = args.update_config
     while True:
         config = configparser.ConfigParser()
-        config_file_path = Path('~/.druggability/config.ini').expanduser()
+        config_file_path = Path('~/.targetdb/config.ini').expanduser()
         config_file_path.parent.mkdir(exist_ok=True, parents=True)
 
         if config_file_path.is_file() and not update_config:
