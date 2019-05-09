@@ -61,6 +61,9 @@ Once created it will automatically start the main user interface (as seen below)
 Instructions to create a targetDB database from scratch
 ---
 
+#### System compatibility
++ Linux
+
 ##### Database creation
 
 The list of required databases is :
