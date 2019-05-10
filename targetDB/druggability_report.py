@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 from Bio import Entrez, Medline
 
 from targetDB import cns_mpo as mpo
@@ -732,6 +733,8 @@ def get_single_excel(target):
                            'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class', 'class_def',
                            'max_phase',
                            'oral']
+                mask = bdb.loc[:,['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']].applymap(np.isreal)
+                bdb[~mask] = np.nan
                 bdb = bdb[((bdb[['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']] <= 10000) & (
                     bdb[['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']].notna())).any(axis=1)]
                 bdb.loc[(bdb[['LogP', 'LogD', 'MW', 'HBD', 'TPSA']].notnull().all(axis=1)) & (
