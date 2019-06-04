@@ -98,8 +98,10 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
     neurodeg = []
     chem = []
     major_keywords = []
-    for i in df['MeSH Terms'].values:
-        if type(i) == float:
+    df_iter = df[['Other Term','MeSH Terms']].copy()
+    df_iter.rename(columns={'Other Term':'other','MeSH Terms':'mesh'},inplace=True)
+    for row in df_iter.itertuples():
+        if type(row.other) == float and type(row.mesh) == float:
             neurodeg.append(False)
             chem.append(False)
             major_keywords.append([])
@@ -107,13 +109,22 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
             major = []
             neuro = False
             chemistry = False
-            for k in i:
-                if 'neurodege' in k.lower() or 'alzheimer' in k.lower() or 'dementia' in k.lower() or 'parkinson' in k.lower():
-                    neuro = True
-                if '*' in k:
-                    major.append(k)
-                if '*chemistry' in k or '*Chemistry' in k:
-                    chemistry = True
+            if type(row.other) == list:
+                for k in row.other:
+                    if 'neurodege' in k.lower() or 'alzheimer' in k.lower() or 'dementia' in k.lower() or 'parkinson' in k.lower():
+                        neuro = True
+                    if '*' in k:
+                        major.append(k)
+                    if '*chemistry' in k or '*Chemistry' in k:
+                        chemistry = True
+            if type(row.mesh) == list:
+                for k in row.mesh:
+                    if 'neurodege' in k.lower() or 'alzheimer' in k.lower() or 'dementia' in k.lower() or 'parkinson' in k.lower():
+                        neuro = True
+                    if '*' in k:
+                        major.append(k)
+                    if '*chemistry' in k or '*Chemistry' in k:
+                        chemistry = True
             major_keywords.append(' / '.join(major))
             if neuro:
                 neurodeg.append(True)
@@ -762,6 +773,8 @@ def get_single_excel(target):
                 comm = res['commercials'].copy()
                 comm.sort_values(by='affinity_value', inplace=True)
                 comm = comm[col_order]
+                comm = pd.merge(comm,comm.website.str.split(' ',expand=True).add_prefix('Source_'),left_index=True,right_index=True)
+                comm.drop(columns=['website'],inplace=True)
                 comm.to_excel(writer, sheet_name='Commercial compounds', index=False)
                 for col_num, value in enumerate(comm.columns.values):
                     writer.sheets['Commercial compounds'].write(0, col_num, value, vert_col_header)
@@ -814,6 +827,16 @@ def get_list_excel(list_targets):
     data = data.merge(tscore.scores, on='Target_id', how='left')
     data = data.merge(pubmed, on='Target_id', how='left')
     list_done = data.Target_id.values.tolist()
+
+    weights_dict = {'structure_info_score':'structure_info_score [mpo coeff= '+str(tscore.coeff['sbio'])+']',
+                    'structural_drug_score':'structural_drug_score [mpo coeff= '+str(tscore.coeff['sdrug'])+']',
+                    'chemistry_score':'chemistry_score [mpo coeff= '+str(tscore.coeff['chem'])+']',
+                    'biology_score':'biology_score [mpo coeff= '+str(tscore.coeff['bio'])+']',
+                    'disease_score':'disease_score [mpo coeff= '+str(tscore.coeff['dise'])+']',
+                    'genetic_score':'genetic_score [mpo coeff= '+str(tscore.coeff['gen'])+']',
+                    'information_score':'information_score [mpo coeff= '+str(tscore.coeff['info'])+']',
+                    'safety_score':'safety_score [mpo coeff= '+str(tscore.coeff['safe'])+']'}
+
 
     for gene_symbol in list_targets.index:
         for tid in list_targets.uniprot_ids.loc[gene_symbol]:
@@ -868,6 +891,7 @@ def get_list_excel(list_targets):
                  "commercial_total", "commercial_potent_total"]
 
     data = data[col_order]
+    data.rename(columns=weights_dict,inplace=True)
     data.sort_values("mpo_score", axis=0, ascending=False, inplace=True, na_position='last')
     data.to_excel(writer, sheet_name='Druggability_list', index=False, startrow=1)
 

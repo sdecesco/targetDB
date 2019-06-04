@@ -368,13 +368,16 @@ class targetDB_gui:
     def launch(self):
         target_list = self.input_text.get("1.0", tk.END).splitlines()
         mode = self.mode.get()
-        if len(target_list) == 1:
-            target_list = target_list[0].split(',')
-        if len(target_list) == 1:
-            showerror('Error'
-                      ,
+        target_list = [w.replace(' ', '') for w in target_list]
+        target_list = list(filter(None, target_list))
+        if len(target_list) == 0:
+            showerror('Error',
                       'Your list of targets is empty or does not seems to be copy/paste from excel or a comma separated string (eg. DYRK1A,PREP,BACE1,...) ')
             return None
+        if len(target_list) == 1:
+            if ',' in target_list[0]:
+                target_list = target_list[0].split(',')
+        target_list = list(filter(None, target_list))
         self.gene_df = g2id.gene_to_id(target_list, targetDB_path=self.targetDB_path)
         message = ''
         if mode == 'list':

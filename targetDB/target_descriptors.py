@@ -29,10 +29,12 @@ class StdevFunc:
             return None
         return math.sqrt(self.S / (self.k - 2))
 
+
 class target_scores:
     def __init__(self, data, mode='list'):
         self.mode = mode
         self.data = data
+        self.coeff = {'sbio': 1, 'sdrug': 1, 'chem': 1, 'bio': 1, 'dise': 1, 'gen': 1, 'info': 1, 'safe': 1}
         self.scores = self.data.Target_id.reset_index().drop(['index'], axis=1)
         self.score_components = self.data.Target_id.reset_index().drop(['index'], axis=1)
 
@@ -56,12 +58,20 @@ class target_scores:
         if self.mode == 'list':
             values = tgui.get_mpo_coeff_gui()
             coeff_df = values.coeff
+            self.coeff = coeff_df
             self.scores_mpo = self.scores.copy()
-            self.scores_mpo.set_index('Target_id',inplace=True)
+            self.scores_mpo.set_index('Target_id', inplace=True)
             self.scores_mpo = self.scores_mpo - 0.5
-            self.scores_mpo = self.scores_mpo*2
-            self.scores_mpo['mpo_score'] = (self.scores_mpo.safety_score * coeff_df['safe'] + self.scores_mpo.information_score * coeff_df['info'] + self.scores_mpo.genetic_score * coeff_df['gen'] + self.scores_mpo.disease_score * coeff_df['dise'] + self.scores_mpo.biology_score * coeff_df['bio'] + self.scores_mpo.chemistry_score *coeff_df['chem'] + self.scores_mpo.structural_drug_score * coeff_df['sdrug'] + self.scores_mpo.structure_info_score * coeff_df['sbio']) / sum([abs(v) for v in coeff_df.values()])
-            self.scores_mpo.mpo_score = self.scores_mpo.mpo_score/2
+            self.scores_mpo = self.scores_mpo * 2
+            self.scores_mpo['mpo_score'] = (self.scores_mpo.safety_score * coeff_df[
+                'safe'] + self.scores_mpo.information_score * coeff_df['info'] + self.scores_mpo.genetic_score *
+                                            coeff_df['gen'] + self.scores_mpo.disease_score * coeff_df[
+                                                'dise'] + self.scores_mpo.biology_score * coeff_df[
+                                                'bio'] + self.scores_mpo.chemistry_score * coeff_df[
+                                                'chem'] + self.scores_mpo.structural_drug_score * coeff_df[
+                                                'sdrug'] + self.scores_mpo.structure_info_score * coeff_df[
+                                                'sbio']) / sum([abs(v) for v in coeff_df.values()])
+            self.scores_mpo.mpo_score = self.scores_mpo.mpo_score / 2
             self.scores_mpo.mpo_score = self.scores_mpo.mpo_score + 0.5
             self.scores_mpo.reset_index(inplace=True)
             self.scores['mpo_score'] = self.scores_mpo.mpo_score

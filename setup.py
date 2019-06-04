@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="targetDB",
-    version="1.1.7",
+    version="1.2.0",
     author="Stephane De Cesco",
     author_email="stephane.decesco@ndm.ox.ac.uk",
     description="Package with an application to generate report on potential drug targets",
@@ -21,6 +21,5 @@ setuptools.setup(
     ),
     install_requires=['biopython', 'scipy', 'matplotlib', 'pandas>=0.21.0', 'intermine', 'opentargets', 'xmltodict'],
     entry_points={'console_scripts': ['target_DB=targetDB.druggability_DB:entry_point',
-                                      'target_REPORT=targetDB.druggability_report:entry_point',
                                       'targetDB=targetDB.druggability_report:entry_point_gui']}
 )
