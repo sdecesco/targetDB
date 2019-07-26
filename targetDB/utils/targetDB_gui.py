@@ -4,6 +4,14 @@ import tkinter as tk
 from tkinter.scrolledtext import ScrolledText
 from tkinter.messagebox import showerror, askokcancel, showinfo
 from tkinter.filedialog import askopenfilename, askdirectory
+
+# start fix for macOS - as per psterk comment on github
+from sys import platform
+if platform == 'darwin':
+    import matplotlib
+    matplotlib.use('TkAgg')
+# end fix for macOS
+
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
