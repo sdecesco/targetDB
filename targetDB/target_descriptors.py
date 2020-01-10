@@ -3,6 +3,12 @@ import pandas as pd
 import numpy as np
 import io, sqlite3, math
 import scipy.stats as sc
+# start fix for macOS - as per psterk comment on github
+from sys import platform
+if platform == 'darwin':
+    import matplotlib
+    matplotlib.use('TkAgg')
+# end fix for macOS
 import matplotlib.pyplot as plt
 from operator import itemgetter
 from targetDB.utils import targetDB_gui as tgui
