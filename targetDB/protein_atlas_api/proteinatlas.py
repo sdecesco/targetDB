@@ -11,10 +11,10 @@ import targetDB.utils.retryers as ret
 
 # GENERAL DICTIONARIES
 sub_class = {'Brain': ['caudate', 'cerebellum', 'cerebral cortex', 'hippocampus'], 'Skin': ['skin','skin 1','skin 2'],
-             'Soft_tissue': ['soft tissue'],
+             'Adipose & soft tissue': ['soft tissue'],
              'Female_tissue': ['breast', 'cervix, uterine', 'endometrium','endometrium 1','endometrium 2','fallopian tube',
                                'ovary', 'placenta', 'vagina'],
-             'Endocrine_tissue': ['adrenal gland', 'parathyroid gland', 'thyroid gland'],
+             'Endocrine tissues': ['Adrenal gland', 'parathyroid gland', 'thyroid gland'],
              'Immune': ['appendix', 'bone marrow', 'lymph node', 'spleen', 'tonsil'],
              'Muscle_tissue': ['heart muscle', 'skeletal muscle', 'smooth muscle'],
              'Lung': ['bronchus', 'lung', 'nasopharynx'],
@@ -69,24 +69,24 @@ def get_protein_level_tissue(xml_dict):
         protein_level['Organs'][sub_key] = 0
     try:
         for i in xml_dict['proteinAtlas']['entry']['tissueExpression']['data']:
-            organ = tissue_to_organ_dict[i['tissue']]
-            if i['tissue'] in protein_level['Tissues'].keys():
-                if i['tissue'] not in tissue_count.keys():
-                    tissue_count[i['tissue']]=1
+            organ = i['tissue']['@organ']
+            if i['tissue']['#text'] in protein_level['Tissues'].keys():
+                if i['tissue']['#text'] not in tissue_count.keys():
+                    tissue_count[i['tissue']['#text']]=1
                 else:
-                    tissue_count[i['tissue']]+=1
-                i['tissue']=i['tissue']+'-'+str(tissue_count[i['tissue']])
+                    tissue_count[i['tissue']['#text']]+=1
+                i['tissue']['#text']=i['tissue']['#text']+'-'+str(tissue_count[i['tissue']['#text']])
             if isinstance(i['tissueCell'],list):
                 for j in i['tissueCell']:
-                    cell_id=organ+'_'+i['tissue']+'_'+j['cellType']
-                    protein_level['Cells'].append({'level':int(conversion_dict[j['level']['#text']]),'tissue':i['tissue'],'cell_type':j['cellType'],'organ':organ,'cell_id':cell_id})
-                    all_cells.append({'tissue':i['tissue'],'cell_type':j['cellType'],'organ':organ,'cell_id':cell_id})
+                    cell_id=organ+'_'+i['tissue']['#text']+'_'+j['cellType']
+                    protein_level['Cells'].append({'level':int(conversion_dict[j['level']['#text']]),'tissue':i['tissue']['#text'],'cell_type':j['cellType'],'organ':organ,'cell_id':cell_id})
+                    all_cells.append({'tissue':i['tissue']['#text'],'cell_type':j['cellType'],'organ':organ,'cell_id':cell_id})
             else:
-                cell_id = organ + '_' + i['tissue'] + '_' + i['tissueCell']['cellType']
-                protein_level['Cells'].append({'level': int(conversion_dict[i['tissueCell']['level']['#text']]),'tissue': i['tissue'], 'cell_type': i['tissueCell']['cellType'],'organ':organ,'cell_id':cell_id})
-                all_cells.append({'tissue': i['tissue'], 'cell_type': i['tissueCell']['cellType'], 'organ': organ, 'cell_id': cell_id})
-            protein_level['Tissues'][i['tissue']] = int(conversion_dict[i['level']['#text']])
-            protein_level['Organs'][organ] += protein_level['Tissues'][i['tissue']]
+                cell_id = organ + '_' + i['tissue']['#text'] + '_' + i['tissueCell']['cellType']
+                protein_level['Cells'].append({'level': int(conversion_dict[i['tissueCell']['level']['#text']]),'tissue': i['tissue']['#text'], 'cell_type': i['tissueCell']['cellType'],'organ':organ,'cell_id':cell_id})
+                all_cells.append({'tissue': i['tissue']['#text'], 'cell_type': i['tissueCell']['cellType'], 'organ': organ, 'cell_id': cell_id})
+            protein_level['Tissues'][i['tissue']['#text']] = int(conversion_dict[i['level']['#text']])
+            protein_level['Organs'][organ] += protein_level['Tissues'][i['tissue']['#text']]
     except KeyError:
         return None
     return protein_level

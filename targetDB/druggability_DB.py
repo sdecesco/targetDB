@@ -27,6 +27,7 @@ from targetDB.utils import pdb_parser
 from targetDB.utils import retryers as ret
 from targetDB.utils import gene2id as g2id
 from targetDB.utils import targetDB_init as tinit
+from targetDB.utils import uniprot_parse
 
 
 def get_list_entries(target_db_path=None):
@@ -47,7 +48,7 @@ def get_uniprot(gene_id):
 		except:
 			return None
 	try:
-		record = SwissProt.read(handle)
+		record = uniprot_parse.read(handle)
 	except ValueError:
 		record = None
 		return record
@@ -102,9 +103,9 @@ def get_crossref_pdb_go_chembl(record):
 	return PDB_list, go, chembl_id
 
 
-@ret.retryer(max_retries=10, timeout=10)
+@ret.retryer(max_retries=20, timeout=30)
 def get_humanmine_data(gene):
-	service = Service("http://www.humanmine.org/humanmine/service")
+	service = Service("https://www.humanmine.org/humanmine/service")
 	disease = []
 	phenotypes = []
 	differential_exp_tissues = []
@@ -246,6 +247,10 @@ def get_domains(record=None, gene_id=None, chembl_id=None):
 		else:
 			print("[ArgumentError]: Combination of arguments is invalid")
 			raise drugg_errors.ArgumentError
+	if gene_id:
+		gid = gene_id
+	else:
+		gid = record.accessions[0]
 
 	for feature in record.features:
 		if feature[0] == 'DOMAIN':
@@ -255,8 +260,8 @@ def get_domains(record=None, gene_id=None, chembl_id=None):
 				start = str(start)[1:]
 			while not str(finish)[0].isdigit():
 				finish = str(finish)[1:]
-			domain_name = str(feature[3]).split('.')[0]
-			domain_id = str(record.accessions[0]) + str(start) + str(finish) + '_uniprot'
+			domain_name = str(feature[3]).split('(')[0].rstrip()
+			domain_id = str(gid) + str(start) + str(finish) + '_uniprot'
 			domain.append(
 				{'Start': int(start), 'Stop': int(finish), 'name': domain_name, 'length': int(finish) - int(start),
 				 'domain_id': domain_id, 'source_name': 'Uniprot', 'Source_id': 'n.a.'})
@@ -268,7 +273,7 @@ def get_domains(record=None, gene_id=None, chembl_id=None):
 		domains_df = pd.read_sql(query, con=connector)
 		connector.close()
 		for i in domains_df.index:
-			domain_id = str(record.accessions[0]) + str(domains_df.loc[i].start_position) + str(
+			domain_id = str(gid) + str(domains_df.loc[i].start_position) + str(
 				domains_df.loc[i].end_position) + '_' + domains_df.loc[i].source_domain_id
 			domain.append({'Start': int(domains_df.loc[i].start_position), 'Stop': int(domains_df.loc[i].end_position),
 			               'name': domains_df.loc[i].domain_name,
@@ -419,7 +424,7 @@ def get_variants(record, domains):
 			isoforms.loc[isoform]['n_residues'] = len(record.sequence)
 		elif 'External' in isoforms.loc[isoform]['seq_mod']:
 			isoforms.loc[isoform]['Canonical'] = 0
-			isoforms.loc[isoform]['sequence'] = get_uniprot(isoforms.loc[isoform]['isoid']).sequence
+			isoforms.loc[isoform]['sequence'] = get_uniprot(str(isoforms.loc[isoform]['isoid']).split('-')[0]).sequence
 			isoforms.loc[isoform]['seq_list'] = list(isoforms.loc[isoform]['sequence'])
 			isoforms.loc[isoform]['n_residues'] = len(isoforms.loc[isoform]['sequence'])
 		else:
@@ -549,7 +554,7 @@ def get_ligands_to_do(chembl_code):
 	query_lig_target = "SELECT TD.chembl_id AS target_id,MOL.chembl_id AS lig_id,version.name as " \
 	                   "chembl_version FROM target_dictionary TD,activities BIO,assays AC," \
 	                   "molecule_dictionary MOL,version WHERE TD.chembl_id='%s' AND TD.tid=AC.tid AND " \
-	                   "AC.assay_id=BIO.assay_id AND BIO.published_value is not null AND " \
+	                   "AC.assay_id=BIO.assay_id AND BIO.value is not null AND " \
 	                   "BIO.molregno=MOL.molregno" % chembl_code
 
 	res_lig_target = pd.read_sql(query_lig_target, con=connector)
@@ -723,7 +728,7 @@ def get_bioactivity(lig_to_do):
 	  version VER
 	WHERE
 	  MOL.chembl_id IN (%s)
-	  AND ACT.published_value IS NOT NULL"""
+	  AND ACT.value IS NOT NULL"""
 	lig_str = ''
 	counter = 0
 	for i in lig_to_do:
@@ -1358,7 +1363,7 @@ class Target:
 
 			# ==========# GET DOMAIN INFORMATION FROM BOTH CHEMBL AND UNIPROT #===========#
 
-			self.domain = get_domains(record=self.record, chembl_id=self.chembl_id)
+			self.domain = get_domains(record=self.record,gene_id=self.swissprotID, chembl_id=self.chembl_id)
 
 			# ==========# GET DISEASE ASSOCIATION (Source: OpenTargets)#===========#
 
@@ -1545,7 +1550,7 @@ def main():
 		createdDB_path = tinit.create_db()
 	while True:
 		config = configparser.ConfigParser()
-		config_file_path = Path('~/.druggability/config.ini').expanduser()
+		config_file_path = Path('~/.targetdb/config.ini').expanduser()
 		config_file_path.parent.mkdir(exist_ok=True, parents=True)
 
 		if config_file_path.is_file() and not update_config:

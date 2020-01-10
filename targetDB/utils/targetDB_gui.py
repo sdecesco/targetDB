@@ -456,6 +456,57 @@ class targetDB_gui:
         return fig
 
 
+    def make_spider_plot_v3(self,data, data_qual, labels, druggability_val=0, target_name=''):
+        fig = plt.figure(figsize=(5, 3))
+        ax = fig.add_axes([0, 0, 0.6, 0.8], polar=True)
+        ax.spines['polar'].set_visible(False)
+        N = len(data)
+        bar_width = 2 * np.pi / N - 0.15
+        theta = np.arange(0 * np.pi, 2 * np.pi, 2 * np.pi / N)
+        theta = np.roll(theta, 4)
+        colors = ['#0c00ed', '#aa00ff', '#cc7700', '#1e7347', '#634100', '#5e5e5e', '#ab000b']
+        # ax.bar(0, 1, bottom=9, width=2 * np.pi, color='r', linewidth=0, alpha=0.3)
+        # ax.bar(0, 5, bottom=4, width=2 * np.pi, color='lime', linewidth=0, alpha=0.2)
+        # ax.bar(0, 3, bottom=1, width=2 * np.pi, color='gold', linewidth=0, alpha=0.2)
+        # ax.bar(0, 1, bottom=0, width=2 * np.pi,alpha=0.2,color='red', linewidth=0)
+        ax.bar(0, 0.3, bottom=13, width=2 * np.pi, alpha=1, color='black', linewidth=0)
+        ax.bar(0, 3, width=2 * np.pi, alpha=1, color=get_green_red_grad(druggability_val, 0, 100), linewidth=0)
+        value = '%2d%%' % druggability_val
+        ax.text(1.1 * np.pi, 0.7 * np.pi, value, weight='bold', size='large')
+        for i in reversed(range(len(data))):
+            if list(labels)[i] in ['Safety', 'Structural Biology', 'Chemistry', 'Genetic Association']:
+                color_to_use = get_green_red_grad(data_qual[i], 0, 10)
+            else:
+                color_to_use = '#d1d1d1'
+            # ax.bar(theta[i], data[i],bottom=3, width=bar_width, align='center', color=color_to_use)
+            ax.bar(theta[i], data[i], bottom=3, width=bar_width, align='center', color=color_to_use,
+                   label=list(labels)[i],
+                   edgecolor=colors[i], linewidth=4)
+
+        plt.title(target_name, weight='bold', fontsize=14)
+        ax.set_xticks(theta)
+        x_labels = [''] * len(theta)
+        ax.set_xticklabels(x_labels)
+        ax.yaxis.grid(True)
+        ax.xaxis.grid(False)
+        fig.legend(loc=7, fontsize=10, fancybox=True, markerscale=1.2)
+        ax.set_yticks([])
+        return fig
+
+def get_green_red_grad(number, v_min, v_max):
+    middle = (v_min + v_max) / 2
+    scale = 255 / (middle - v_min)
+    if number <= v_min:
+        color = "#FF0000"
+    elif number >= v_max:
+        color = "#00FF00"
+    elif number < middle:
+        color = "#FF%02X00" % int((number - v_min) * scale)
+    else:
+        color = "#%02XFF00" % (255 - int((number - middle) * scale))
+    return color
+
+
 def error(message):
     showerror("Error", message)
 
