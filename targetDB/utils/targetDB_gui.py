@@ -17,10 +17,14 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import configparser
 from pathlib import Path
+import pandas as pd
 
 from targetDB import druggability_report as dr
 from targetDB import target_descriptors as td
 from targetDB.utils import gene2id as g2id
+from targetDB.utils import druggability_ml as dml
+
+ml_model = dml.generate_model()
 
 
 class ScrolledFrame(tk.Frame):
@@ -410,21 +414,32 @@ class targetDB_gui:
                                                       targetdb=self.targetDB_path)
                 tscore = td.target_scores(target_desc, mode='single')
                 target_desc = target_desc.merge(tscore.scores, on='Target_id', how='left')
-                score_col = ['structure_info_score', 'structural_drug_score', 'chemistry_score', 'biology_score',
+                druggability_pred = dml.predict(ml_model, tscore.score_components)
+                drug_proba = pd.DataFrame(dml.predict_prob(ml_model, tscore.score_components),
+                                          columns=ml_model.classes_)
+                tscore.scores['Tractable'] = druggability_pred
+                tscore.scores['Tractability_probability'] = round(drug_proba[1] * 100, 2)
+                tscore.scores['Tractable'] = tscore.scores['Tractable'].replace({0: 'False', 1: 'True'})
+                tscore.scores['In_training_set'] = dml.in_training_set(tscore.score_components)
+                score_col = ['structure_info_score', 'chemistry_score', 'biology_score',
                              'disease_score', 'genetic_score', 'information_score', 'safety_score']
                 target_score = target_desc[score_col] * 10
                 target_score.index = target_desc.Target_id
                 target_score.fillna(0, inplace=True)
-                target_score = target_score.rename(columns={'structure_info_score': 'Structural information',
-                                                            'structural_drug_score': 'Structural Druggability',
+                target_score = target_score.rename(columns={'structure_info_score': 'Structural Biology',
                                                             'chemistry_score': 'Chemistry', 'biology_score': 'Biology',
                                                             'disease_score': 'Diseases',
                                                             'genetic_score': 'Genetic Association',
                                                             'information_score': 'Literature',
                                                             'safety_score': 'Safety'})
-                self.spider_plot = self.make_spider_plot \
-                    (target_score.loc[self.gene_df.loc[gene_name]['uniprot_ids'][0]].values, target_score.columns,
-                     target_name=self.gene_df.loc[gene_name]['symbol'])
+                target_qual = tscore.scores_quality.copy()
+                target_qual.set_index('Target_id',inplace=True)
+                target_qual = target_qual*10
+                target_qual.fillna(0,inplace=True)
+                target_qual = target_qual.rename(columns={'structural_drug_score':'Structural Biology','chemistry_qual_score':'Chemistry','genetic_score_qual':'Genetic Association','safety_qual': 'Safety'})
+                self.spider_plot = self.make_spider_plot(target_score.loc[self.gene_df.loc[gene_name]['uniprot_ids'][0]].values, target_score.columns,target_name=self.gene_df.loc[gene_name]['symbol'])
+                self.spider_plot = self.make_spider_plot_v3(target_score.loc[self.gene_df.loc[gene_name]['uniprot_ids'][0]].values,target_qual.loc[self.gene_df.loc[gene_name]['uniprot_ids'][0]].to_dict(),target_score.columns,druggability_val=tscore.scores.iloc[0]['Tractability_probability'],target_name=self.gene_df.loc[gene_name]['symbol'])
+
                 canvas = FigureCanvasTkAgg(self.spider_plot, master=spider_window.inner)
                 canvas.get_tk_widget().pack(expand=True, fill='both')
                 # canvas.get_tk_widget().grid(column=col,row=row,sticky='ew')
@@ -463,7 +478,6 @@ class targetDB_gui:
         ax.set_yticks([])
         return fig
 
-
     def make_spider_plot_v3(self,data, data_qual, labels, druggability_val=0, target_name=''):
         fig = plt.figure(figsize=(5, 3))
         ax = fig.add_axes([0, 0, 0.6, 0.8], polar=True)
@@ -483,7 +497,7 @@ class targetDB_gui:
         ax.text(1.1 * np.pi, 0.7 * np.pi, value, weight='bold', size='large')
         for i in reversed(range(len(data))):
             if list(labels)[i] in ['Safety', 'Structural Biology', 'Chemistry', 'Genetic Association']:
-                color_to_use = get_green_red_grad(data_qual[i], 0, 10)
+                color_to_use = get_green_red_grad(data_qual[list(labels)[i]], 0, 10)
             else:
                 color_to_use = '#d1d1d1'
             # ax.bar(theta[i], data[i],bottom=3, width=bar_width, align='center', color=color_to_use)
@@ -500,6 +514,7 @@ class targetDB_gui:
         fig.legend(loc=7, fontsize=10, fancybox=True, markerscale=1.2)
         ax.set_yticks([])
         return fig
+
 
 def get_green_red_grad(number, v_min, v_max):
     middle = (v_min + v_max) / 2

@@ -15,7 +15,7 @@ def generate_model():
 
     pck_path = Path(str(pkg_resources.resource_filename('targetDB.utils', ''))).parent
     ml_data = pck_path.joinpath('ml_data')
-    ml_data = ml_data.joinpath('ml_training_data_26_03_2019.zip')
+    ml_data = ml_data.joinpath('ml_training_data_13_01_2020.zip')
 
     training_df = pd.read_json(ml_data, compression='zip')
 
@@ -31,7 +31,10 @@ def predict(model, data):
     df.replace({True: 1, False: 0}, inplace=True)
     df = df.fillna(0)
     # Only columns to consider in the model (see .ipynb file for selection of the columns)
-    df = df.drop(columns=['commercial_potent', 'information_score','OT_max_association_score', 'dis_AScore'],axis=1)
+    col_to_drop = ['OT_max_association_score', 'Heart_alert', 'Liver_alert', 'Kidney_alert', 'dis_AScore',
+                    'bio_EScore', 'safe_EScore', 'chembl_selective_M', 'chembl_selective_G', 'chembl_selective_E',
+                    'bindingDB_phase2','commercial_potent', 'information_score','gen_AQualScore', 'genetic_NORM']
+    df = df.drop(columns=col_to_drop,axis=1)
 
     return model.predict(df)
 
@@ -43,7 +46,10 @@ def predict_prob(model, data):
     df.replace({True: 1, False: 0}, inplace=True)
     df = df.fillna(0)
     # Only columns to consider in the model (see .ipynb file for selection of the columns
-    df = df.drop(columns=['commercial_potent', 'information_score', 'OT_max_association_score', 'dis_AScore'], axis=1)
+    col_to_drop = ['OT_max_association_score', 'Heart_alert', 'Liver_alert', 'Kidney_alert', 'dis_AScore',
+                    'bio_EScore', 'safe_EScore', 'chembl_selective_M', 'chembl_selective_G', 'chembl_selective_E',
+                    'bindingDB_phase2','commercial_potent', 'information_score','gen_AQualScore', 'genetic_NORM']
+    df = df.drop(columns=col_to_drop, axis=1)
     return model.predict_proba(df)
 
 
@@ -51,7 +57,7 @@ def in_training_set(data):
 
     pck_path = Path(str(pkg_resources.resource_filename('targetDB.utils', ''))).parent
     ml_data = pck_path.joinpath('ml_data')
-    ml_data = ml_data.joinpath('ml_training_data_26_03_2019.zip')
+    ml_data = ml_data.joinpath('ml_training_data_13_01_2020.zip')
 
     training_df = pd.read_json(ml_data, compression='zip')
 
