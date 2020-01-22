@@ -276,12 +276,17 @@ def get_single_excel(target):
                                                             'information_score': 'Literature',
                                                             'safety_score': 'Safety'})
                 target_qual = tscore.scores_quality.copy()
-                target_qual.set_index('Target_id',inplace=True)
-                target_qual = target_qual*10
-                target_qual.fillna(0,inplace=True)
-                target_qual = target_qual.rename(columns={'structural_drug_score':'Structural Biology','chemistry_qual_score':'Chemistry','genetic_score_qual':'Genetic Association','safety_qual': 'Safety'})
-                #spider_plot = td.make_spider_plot(target_score.loc[uniprot_id].values, target_score.columns, target_name=res['general_info'].iloc[0]['Gene_name'])
-                spider_plot = td.make_spider_plot_v3(target_score.loc[uniprot_id].values,target_qual.loc[uniprot_id].to_dict(),target_score.columns,druggability_val=tscore.scores.iloc[0]['Tractability_probability'],target_name=res['general_info'].iloc[0]['Gene_name'])
+                target_qual.set_index('Target_id', inplace=True)
+                target_qual = target_qual * 10
+                target_qual.fillna(0, inplace=True)
+                target_qual = target_qual.rename(
+                    columns={'structural_drug_score': 'Structural Biology', 'chemistry_qual_score': 'Chemistry',
+                             'genetic_score_qual': 'Genetic Association', 'safety_qual': 'Safety'})
+                # spider_plot = td.make_spider_plot(target_score.loc[uniprot_id].values, target_score.columns, target_name=res['general_info'].iloc[0]['Gene_name'])
+                spider_plot = td.make_spider_plot_v3(target_score.loc[uniprot_id].values,
+                                                     target_qual.loc[uniprot_id].to_dict(), target_score.columns,
+                                                     druggability_val=tscore.scores.iloc[0]['Tractability_probability'],
+                                                     target_name=res['general_info'].iloc[0]['Gene_name'])
 
                 wb_general_info.insert_image('G1', 'spider_plot', {'image_data': spider_plot})
 
@@ -345,24 +350,28 @@ def get_single_excel(target):
             # ============================ EXPRESSION TAB ===============================#
 
             # EXPRESSION HEADER
-            expression_header_index = {'Tissue Expression': (0, 0, 0, 3), 'Tissue': (1, 0), 't_stat': (1, 1),
-                                       'std_dev_t': (1, 2), 'n': (1, 3), 'Selectivity': (0, 5, 0, 6),
-                                       'ORGANS': (1, 5, 1, 8), 'organ_name': (2, 5), 'Total_value': (2, 6),
-                                       'n_tissues': (2, 7), 'avg_value': (2, 8)}
+            # expression_header_index = {'Tissue Expression': (0, 0, 0, 3), 'Tissue': (1, 0), 't_stat': (1, 1),
+            #                            'std_dev_t': (1, 2), 'n': (1, 3), 'Selectivity': (0, 5, 0, 6),
+            #                            'ORGANS': (1, 5, 1, 8), 'organ_name': (2, 5), 'Total_value': (2, 6),
+            #                            'n_tissues': (2, 7), 'avg_value': (2, 8)}
+
+            expression_header_index = {'Selectivity': (0, 0, 0, 1),
+                                       'ORGANS': (1, 0, 1, 3), 'organ_name': (2, 0), 'Total_value': (2, 1),
+                                       'n_tissues': (2, 2), 'avg_value': (2, 3)}
             write_excel_header(expression_header_index, wb_expression, col_header)
 
-            if not res['tissue'].empty:
-                for i in range(len(res['tissue'])):
-                    for k, v in res['tissue'].iloc[i].items():
-                        row, col = expression_header_index[k]
-                        row = row + i + 1
-                        wb_expression.write(row, col, v)
-                wb_expression.conditional_format(1, 1, row, 1, {'type': 'data_bar'})
-                wb_expression.conditional_format(1, 2, row, 2, {'type': 'icon_set', 'reverse_icons': True,
-                                                                'icon_style': '3_traffic_lights'})
+            # if not res['tissue'].empty:
+            #     for i in range(len(res['tissue'])):
+            #         for k, v in res['tissue'].iloc[i].items():
+            #             row, col = expression_header_index[k]
+            #             row = row + i + 1
+            #             wb_expression.write(row, col, v)
+                # wb_expression.conditional_format(1, 1, row, 1, {'type': 'data_bar'})
+                # wb_expression.conditional_format(1, 2, row, 2, {'type': 'icon_set', 'reverse_icons': True,
+                #                                                 'icon_style': '3_traffic_lights'})
 
             if not res['selectivity'].empty:
-                wb_expression.merge_range(0, 7, 0, 8, res['selectivity'].iloc[0]['Selectivity_entropy'], col_header)
+                wb_expression.merge_range(0, 2, 0, 3, res['selectivity'].iloc[0]['Selectivity_entropy'], col_header)
 
             if not res['organ_expression'].empty:
                 for i in range(len(res['organ_expression'])):
@@ -370,12 +379,12 @@ def get_single_excel(target):
                         row, col = expression_header_index[k]
                         row = row + i + 1
                         wb_expression.write(row, col, v)
-                wb_expression.conditional_format(3, 8, row, 8, {'type': 'data_bar'})
+                wb_expression.conditional_format(3, 3, row, 3, {'type': 'data_bar'})
 
             if not res['tissue_expression'].empty:
                 previous_organ = ''
                 row = 0
-                col = 10
+                col = 5
                 organ_count = 0
                 for i in range(len(res['tissue_expression'])):
                     if res['tissue_expression'].iloc[i]['organ'] != previous_organ:
@@ -864,9 +873,11 @@ def get_list_excel(list_targets):
                  'information_score', 'safety_score',
                  "EBI Total Patent Count", "JensenLab PubMed Score", "NCBI Gene PubMed Count", "PubTator Score",
                  "total_patent_count", "year_max_patents", "count_patents_max_year", "novelty_score",
-                 "total # publications", "number of Dementia publications", "Brain", "Endocrine_tissue",
-                 "Female_tissue", "Immune", "Kidney", "Liver_gallbladder", "Lung", "Male_tissue", "Muscle_tissue",
-                 "Pancreas", "Skin", "Soft_tissue", "gitract", "Expression_Selectivity", "tissue_max_expression",
+                 "total # publications", "number of Dementia publications", 'Brain', 'Adipose & soft tissue',
+                 'Bone marrow & lymphoid tissues', 'Endocrine tissues',
+                 'Female tissues', 'Gastrointestinal tract', 'Kidney & urinary bladder',
+                 'Liver & gallbladder', 'Lung', 'Male tissues', 'Muscle tissues',
+                 'Pancreas', 'Proximal digestive tract', 'Skin', "Expression_Selectivity", "tissue_max_expression",
                  "expression_max_tissue", 'EXP_LVL_AVG', 'EXP_LVL_STDDEV', 'Heart_alert', 'Heart_value', 'Liver_alert',
                  'Liver_value', 'Kidney_alert', 'Kidney_value',
                  "variants_count", "mutants_count", "gwas_count", 'number_of_genotypes',
@@ -904,7 +915,7 @@ def get_list_excel(list_targets):
     gen_info_len = 7
     score_len = 12
     litt_len = 10
-    bio_len = 34
+    bio_len = 35
     pathways_len = 37
     structure_len = 29
     chemistry_len = 10
