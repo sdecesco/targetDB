@@ -7,6 +7,7 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
+import pkg_resources
 
 import pandas as pd
 import numpy as np
@@ -952,6 +953,13 @@ def get_list_excel(list_targets):
                     {'bold': True, 'bg_color': color_dict[head], 'align': 'center', 'valign': 'bottom', 'rotation': 90})
                 break
         writer.sheets['Druggability_list'].write(1, col_num, value, vert_col_header)
+
+    pck_path = Path(str(pkg_resources.resource_filename('targetDB.utils', ''))).parent
+    col_desc = pck_path.joinpath('resources')
+    col_desc = col_desc.joinpath('TargetDB_list_output_columns_definition.xlsx')
+
+    df_col_desc = pd.read_excel(col_desc)
+    df_col_desc.to_excel(writer,'Columns description',index=False)
 
     not_in_db.to_excel(writer, 'Not in DB', index=False)
     writer.save()

@@ -1153,7 +1153,7 @@ def make_spider_plot_v3(data, data_qual, labels, druggability_val=0, target_name
     bar_width = 2 * np.pi / N - 0.15
     theta = np.arange(0 * np.pi, 2 * np.pi, 2 * np.pi / N)
     theta = np.roll(theta, 4)
-    colors = ['#0c00ed', '#aa00ff', '#cc7700', '#1e7347', '#634100', '#5e5e5e', '#ab000b']
+    colors = ['#5c88ed', '#b56dd6', '#6bcf67', '#f0ed37', '#f08522', '#7a7a7a', '#d41c1c']
     # ax.bar(0, 1, bottom=9, width=2 * np.pi, color='r', linewidth=0, alpha=0.3)
     # ax.bar(0, 5, bottom=4, width=2 * np.pi, color='lime', linewidth=0, alpha=0.2)
     # ax.bar(0, 3, bottom=1, width=2 * np.pi, color='gold', linewidth=0, alpha=0.2)
