@@ -27,7 +27,7 @@ This package relies on the use of sqlite database to properly function.
 
 + targetDB
 
-You can download a copy of the database [HERE](https://github.com/sdecesco/targetDB/releases/download/v1.3.0/TargetDB_20_12_19.db.zip)
+You can download a copy of the database [HERE](https://github.com/sdecesco/targetDB/releases/download/v1.3.1/TargetDB_20_12_19.db.zip)
 
 >This database contains all of the human genome genes that have a uniprot ID
 
