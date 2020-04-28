@@ -12,6 +12,14 @@ Installation
 pip install targetDB
 ```
 
+#### Conda installation
+
+```
+conda create --name targetdb --channel bioconda targetdb
+conda activate targetdb
+target_DB --help
+```
+
 ##### Python compatibility
 
 python version **>= 3.4**
@@ -46,11 +54,11 @@ targetDB package provides a user interface to use the tool: `targetDB`
 
 When using `targetDB` for the first time you will be asked to enter information about:
 + targetDB sqlite database file
-+ path to save list output files 
++ path to save list output files
 + path to save detailed target output files
 + email address (used for pubmed searches if none provided no pubmed search will be run)
 
-Those informations will be stored in ~/.targetdb/config.ini 
+Those informations will be stored in ~/.targetdb/config.ini
 
 ![Configuration panel](targetDB/resources/configuration.png)
 
@@ -76,12 +84,12 @@ ChEMBL sqlite database can be directly downloaded [HERE](https://www.ebi.ac.uk/c
 #### Other dependencies for the database creation mode
 
 ##### blast
-This mode use blast locally to perform similarity search and sequence alignments 
+This mode use blast locally to perform similarity search and sequence alignments
 
 information to download and install blast locally can be found [HERE](https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Web&PAGE_TYPE=BlastDocs&DOC_TYPE=Download)
 
 ##### fpocket
-In order to perform binding pocket searches and assess their druggability the program fpocket is used 
+In order to perform binding pocket searches and assess their druggability the program fpocket is used
 
 >Vincent Le Guilloux, Peter Schmidtke and Pierre Tuffery, "Fpocket: An open source platform for ligand pocket detection", BMC Bioinformatics, 2009, 10:168
 
