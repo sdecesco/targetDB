@@ -12,3 +12,4 @@ dist/
 targetDB\.egg-info/
 
 venv/
+targetDB/examples/Machine_learning_model/.ipynb_checkpoints/

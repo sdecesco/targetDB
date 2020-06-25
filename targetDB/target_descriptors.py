@@ -835,8 +835,11 @@ def get_descriptors_list(target_id, targetdb=None):
             columns={'organ': 'tissue_max_expression', 'value': 'expression_max_tissue'})
     else:
         tissue = pd.DataFrame(
-            columns=['Target_id', 'Brain', 'Endocrine_tissue', 'Female_tissue', 'Immune', 'Kidney', 'Liver_gallbladder',
-                     'Lung', 'Male_tissue', 'Muscle_tissue', 'Pancreas', 'Skin', 'Soft_tissue', 'gitract'])
+            columns=['Target_id','Brain', 'Adipose & soft tissue',
+                 'Bone marrow & lymphoid tissues', 'Endocrine tissues',
+                 'Female tissues', 'Gastrointestinal tract', 'Kidney & urinary bladder',
+                 'Liver & gallbladder', 'Lung', 'Male tissues', 'Muscle tissues',
+                 'Pancreas', 'Proximal digestive tract', 'Skin'])
         tissue_avg = pd.DataFrame(columns=['Target_id', 'EXP_LVL_AVG', 'EXP_LVL_STDDEV', 'Heart_alert',
                                            'Heart_value', 'Liver_alert', 'Liver_value', 'Kidney_alert',
                                            'Kidney_value'])

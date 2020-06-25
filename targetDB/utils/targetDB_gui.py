@@ -23,6 +23,8 @@ from targetDB import druggability_report as dr
 from targetDB import target_descriptors as td
 from targetDB.utils import gene2id as g2id
 from targetDB.utils import druggability_ml as dml
+from tkinter.filedialog import asksaveasfilename
+from tkinter import Button
 
 ml_model = dml.generate_model()
 
@@ -390,10 +392,10 @@ class targetDB_gui:
             if ',' in target_list[0]:
                 target_list = target_list[0].split(',')
         target_list = list(filter(None, target_list))
-        self.gene_df = g2id.gene_to_id(target_list, targetDB_path=self.targetDB_path)
+        self.gene_df,self.not_found = g2id.gene_to_id(target_list, targetDB_path=self.targetDB_path)
         message = ''
         if mode == 'list':
-            dr.get_list_excel(self.gene_df)
+            dr.get_list_excel(self.gene_df,not_found=self.not_found)
         if mode == 'single':
             for gene_name in self.gene_df.index:
                 message += dr.get_single_excel(self.gene_df.loc[gene_name])
@@ -401,7 +403,7 @@ class targetDB_gui:
         if mode == 'spider':
             self.top_spider = tk.Toplevel(self.window)
             self.top_spider.protocol("WM_DELETE_WINDOW", self.closing_top)
-            self.top_spider.geometry("600x800")
+            self.top_spider.geometry("1000x800")
             self.top_spider.resizable(False, True)
 
             spider_window = ScrolledFrame(self.top_spider)
@@ -409,6 +411,8 @@ class targetDB_gui:
             # grid_width = 3
             # col = 0
             # row = 0
+            gene_idx = 0
+            self.spider_plots = []
             for gene_name in self.gene_df.index:
                 target_desc = td.get_descriptors_list(self.gene_df.loc[gene_name]['uniprot_ids'][0],
                                                       targetdb=self.targetDB_path)
@@ -437,18 +441,25 @@ class targetDB_gui:
                 target_qual = target_qual*10
                 target_qual.fillna(0,inplace=True)
                 target_qual = target_qual.rename(columns={'structural_drug_score':'Structural Biology','chemistry_qual_score':'Chemistry','genetic_score_qual':'Genetic Association','safety_qual': 'Safety'})
-                self.spider_plot = self.make_spider_plot(target_score.loc[self.gene_df.loc[gene_name]['uniprot_ids'][0]].values, target_score.columns,target_name=self.gene_df.loc[gene_name]['symbol'])
+                #self.spider_plot = self.make_spider_plot(target_score.loc[self.gene_df.loc[gene_name]['uniprot_ids'][0]].values, target_score.columns,target_name=self.gene_df.loc[gene_name]['symbol'])
                 self.spider_plot = self.make_spider_plot_v3(target_score.loc[self.gene_df.loc[gene_name]['uniprot_ids'][0]].values,target_qual.loc[self.gene_df.loc[gene_name]['uniprot_ids'][0]].to_dict(),target_score.columns,druggability_val=tscore.scores.iloc[0]['Tractability_probability'],target_name=self.gene_df.loc[gene_name]['symbol'])
+                self.spider_plots.append(self.spider_plot)
 
                 canvas = FigureCanvasTkAgg(self.spider_plot, master=spider_window.inner)
                 canvas.get_tk_widget().pack(expand=True, fill='both')
+                b = Button(spider_window.inner, text="SAVE", bg="red", fg='white', command=lambda x=gene_idx: self.save_fig(n=x))
+                b.pack()
                 # canvas.get_tk_widget().grid(column=col,row=row,sticky='ew')
                 # col+=1
                 # if col == grid_width:
                 #     col = 0
                 #     row+=1
+                gene_idx+=1
                 plt.close(self.spider_plot)
             self.window.wait_window(self.top_spider)
+
+
+
 
     def closing_top(self):
         self.top_spider.destroy()
@@ -515,6 +526,10 @@ class targetDB_gui:
         fig.legend(loc=7, fontsize=10, fancybox=True, markerscale=1.2)
         ax.set_yticks([])
         return fig
+
+    def save_fig(self,n=None):
+        file_name = asksaveasfilename(defaultextension=".jpg")
+        self.spider_plots[n].savefig(file_name)
 
 
 def get_green_red_grad(number, v_min, v_max):

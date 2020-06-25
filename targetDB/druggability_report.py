@@ -807,8 +807,8 @@ def get_single_excel(target):
     return message
 
 
-def get_list_excel(list_targets):
-    not_in_db = {'Not present in DB': []}
+def get_list_excel(list_targets,not_found=[]):
+    not_in_db = {'Not present in DB': not_found}
 
     if list_targets.empty:
         return print("No genes that you entered are in the Database")
@@ -854,10 +854,10 @@ def get_list_excel(list_targets):
                     'information_score': 'information_score [mpo coeff= ' + str(tscore.coeff['info']) + ']',
                     'safety_score': 'safety_score [mpo coeff= ' + str(tscore.coeff['safe']) + ']'}
 
-    for gene_symbol in list_targets.index:
-        for tid in list_targets.uniprot_ids.loc[gene_symbol]:
-            if tid not in list_done:
-                not_in_db['Not present in DB'].append(list_targets.symbol.loc[gene_symbol])
+    # for gene_symbol in list_targets.index:
+    #     for tid in list_targets.uniprot_ids.loc[gene_symbol]:
+    #         if tid not in list_done:
+    #             not_in_db['Not present in DB'].append(list_targets.symbol.loc[gene_symbol])
     not_in_db = pd.DataFrame.from_dict(not_in_db)
 
     t = time.strftime("%d%b%Y_%H%M%S")

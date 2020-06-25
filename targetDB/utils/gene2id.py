@@ -39,7 +39,8 @@ def gene_to_id(list_of_genes,targetDB_path=None):
 	output = output.reset_index()
 	output.drop_duplicates(subset=['hgnc_id','ensembl_gene_id','symbol'],inplace=True)
 	output.index = output['hgnc_id']
-	return output
+	not_present = [x for x in gene_list if x not in list(xref_piv.symbol)]
+	return output,not_present
 
 
 def gene_to_id_all(targetDB_path=None):

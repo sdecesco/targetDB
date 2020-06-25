@@ -1,7 +1,9 @@
 TargetDB
 =========
 
-TargetDB is a tool to quickly querry multiple publicly available databases and provide an integrated view of the information available about potential targets. A quick binding pocket search is also performed (using `fpocket`).
+TargetDB is a tool to quickly query multiple publicly available databases and provide an integrated view of the information available about potential targets. A quick binding pocket search is also performed (using `fpocket`).
+
+**Tutorial**: A document containing details on the methods used can be found [HERE (pdf)](targetDB/resources/TargetDB_tutorial.pdf)
 
 Installation
 ------------
@@ -66,16 +68,56 @@ Once created it will automatically start the main user interface (as seen below)
 
 ![Main interface](targetDB/resources/targetdb_gui.png)
 
+
+Examples
+-----
+TargetDB can be used in three modes:
++ Single
++ List 
++ Spider plot 
+
+####Single mode outputs
+A series of examples can be downloaded here (Excel file)
++ [ACHE](targetDB/examples/single_targets/ACHE_P22303.xlsx)
++ [APOE](targetDB/examples/single_targets/APOE_P02649.xlsx)
++ [BACE1](targetDB/examples/single_targets/BACE1_P56817.xlsx)
++ [Tau](targetDB/examples/single_targets/MAPT_P10636.xlsx)
++ [PSEN1](targetDB/examples/single_targets/PSEN1_P49768.xlsx)
+
+####List mode outputs
+In this example we have used a list of 95 targets provided by the AMP-AD consortium ([LINK HERE](https://agora.ampadportal.org/genes/))
+
+You can download two version of the list with different weight used to construct the MPO Score
++ [AMPAD - Medicinal chemist pioritization](targetDB/examples/List_outputs/AMPAD_NomList_MedChemMPO.xlsx)
++ [AMPAD - Structural biologist pioritization](targetDB/examples/List_outputs/AMPAD_NomList_StructuralMPO.xlsx)
+
+You can also find a list used to prioritize an entire class of proteins (Solute Carrier Protein)
++ [SLC Prioritization](targetDB/examples/List_outputs/SLC_ListPrioritization.xlsx)
+
+A definition of all the columns in the output can also be downloaded
++ [Columns definition](targetDB/examples/List_outputs/TargetDB_list_output_columns_definition.xlsx)
+
+####Spider Plots
+A spider plot is here used to quickly give an idea of the area in which a target has strength and weaknesses
+![APOE](targetDB/resources/APOE_Spider.png)
+Here under a guide to help reading these plots: 
+![Spider_guide](targetDB/resources/Figure_spider_plot_legend.png)
+
 Instructions to create a targetDB database from scratch
 ---
+>**`WARNING`**: This mode is not fully supported and we cannot guarantee it will execute without errors
 
 #### System compatibility
 + Linux
 
 ##### Database creation
 
+`target_DB`
+![Database creation](targetDB/resources/target_DB_command.png)
+
+
 The list of required databases is :
-+ ChEMBL v24
++ ChEMBL v25
 
 ChEMBL sqlite database can be directly downloaded [HERE](https://www.ebi.ac.uk/chembl/downloads)
 
