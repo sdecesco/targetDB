@@ -76,7 +76,7 @@ TargetDB can be used in three modes:
 + List 
 + Spider plot 
 
-####Single mode outputs
+#### Single mode outputs
 A series of examples can be downloaded here (Excel file)
 + [ACHE](targetDB/examples/single_targets/ACHE_P22303.xlsx)
 + [APOE](targetDB/examples/single_targets/APOE_P02649.xlsx)
@@ -84,7 +84,7 @@ A series of examples can be downloaded here (Excel file)
 + [Tau](targetDB/examples/single_targets/MAPT_P10636.xlsx)
 + [PSEN1](targetDB/examples/single_targets/PSEN1_P49768.xlsx)
 
-####List mode outputs
+#### List mode outputs
 In this example we have used a list of 95 targets provided by the AMP-AD consortium ([LINK HERE](https://agora.ampadportal.org/genes/))
 
 You can download two version of the list with different weight used to construct the MPO Score
@@ -97,10 +97,13 @@ You can also find a list used to prioritize an entire class of proteins (Solute 
 A definition of all the columns in the output can also be downloaded
 + [Columns definition](targetDB/examples/List_outputs/TargetDB_list_output_columns_definition.xlsx)
 
-####Spider Plots
+#### Spider Plots
 A spider plot is here used to quickly give an idea of the area in which a target has strength and weaknesses
+
 ![APOE](targetDB/resources/APOE_Spider.png)
+
 Here under a guide to help reading these plots: 
+
 ![Spider_guide](targetDB/resources/Figure_spider_plot_legend.png)
 
 Instructions to create a targetDB database from scratch
