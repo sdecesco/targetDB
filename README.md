@@ -8,7 +8,7 @@ TargetDB is a tool to quickly query multiple publicly available databases and pr
 Installation
 ------------
 ### Python package installation
-#### Pip installation
+#### Pip installation (Preferred way)
 
 ```
 pip install targetDB
