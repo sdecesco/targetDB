@@ -78,6 +78,7 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
     data = [i for i in Medline.parse(info_pub)]
 
     df = pd.DataFrame.from_records(data)
+    df.dropna(subset=['PMID'],inplace=True)
     df.rename(index=str, columns=dict_medline, inplace=True)
     pub_type_list = ['Journal Article', 'Case Reports', 'Clinical Trial', 'Comparative Study', 'Letter',
                      'Meta-Analysis', 'Review']
