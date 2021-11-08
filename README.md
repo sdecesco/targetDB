@@ -14,6 +14,8 @@ Installation
 pip install targetDB
 ```
 
+<span style="color:red">*Installation will fail due to opentargets dependency - 08/11/2021* (a fix will be needed and/or an opentarget-free version released) </span>
+
 #### Conda installation
 
 ```
