@@ -1116,11 +1116,22 @@ def open_target_association(ensembl_id):
 	# Set base URL of GraphQL API endpoint
 	base_url = "https://api.platform.opentargets.org/api/v4/graphql"
 
-	# Perform POST request and check status code of response
-	r = requests.post(base_url, json={"query": query_string, "variables":{}})
-
-	# Transform API response into JSON
-	api_response_as_json = json.loads(r.text)
+	try:
+		# Perform POST request and check status code of response
+		r = requests.post(base_url, json={"query": query_string, "variables":{}})
+		if r.status_code<>200:
+			print("[OPENTARGETS]: Couldn't get results from Open Targets API")
+			pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
+								  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+								  'gene_symbol'])
+		# Transform API response into JSON
+		api_response_as_json = json.loads(r.text)
+	except:
+		if verbose:
+			print("[OPENTARGETS]: Something is broken with the Open Targets API")
+		pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
+							  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+							  'gene_symbol'])
 
 	# Extract the assodiated diseases info for this target
 	ad=pd.DataFrame.from_dict(api_response_as_json['data']['target']['associatedDiseases'])
