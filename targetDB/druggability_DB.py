@@ -917,8 +917,8 @@ def proteins_blast(sequence, gene_id, gene, path):
 		for hsp in alignment.hsps:
 			length = float(hsp.align_length)
 			neighbour_accession_code = alignment.accession
-			neighbour_gene_name = alignment.hit_id.split('|')[-1].split('_')[0]
-			neighbour_gene_species = alignment.hit_id.split('|')[-1].split('_')[1]
+			neighbour_gene_name = alignment.title.split('|')[-1].split('_')[0]
+			neighbour_gene_species = alignment.title.split('|')[-1].split('_')[1].split(' ')[0]
 			if neighbour_accession_code in list_of_accession_ID:
 				continue
 			else:
