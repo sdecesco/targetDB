@@ -1340,7 +1340,7 @@ def write_to_db(target, db_path):
 	# ========# FILLING THE CROSSREF TABLE #=========#
 
 	target.open_targets['target_id'] = target.swissprotID
-	target.open_targets.disease_area = target.open_targets.disease_area.apply(lambda x: ','.join(x))
+	target.open_targets.disease_area = target.open_targets.disease_area
 	target.open_targets.drop(columns=['gene_symbol'],inplace=True)
 	target.open_targets.to_sql('opentarget_association', con=connector, if_exists='append', index=False)
 
