@@ -1084,7 +1084,9 @@ def open_target_association(ensembl_id):
 		return pd.DataFrame(columns=['affected_pathway','animal_model','genetic_association', 'known_drug', 'literature', 'rna_expression', 'somatic_mutation', 'overall_score','disease_name','disease_area','gene_symbol'])
 
 	# Create empty data frame for return
-	df = pd.DataFrame()
+	df=pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
+								  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+								  'gene_symbol'])
 
 	# Build GraphQL string to return gene symbol, a row for each associated disease plus scores
 	query_string = """
@@ -1120,21 +1122,24 @@ def open_target_association(ensembl_id):
 		# Perform POST request and check status code of response
 		r = requests.post(base_url, json={"query": query_string, "variables":{}})
 		if r.status_code!=200:
-			print("[OPENTARGETS]: Couldn't get results from Open Targets API")
-			pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
-								  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
-								  'gene_symbol'])
+			if verbose:
+				print("[OPENTARGETS]: Couldn't get results from Open Targets API")
+			return df
 		# Transform API response into JSON
 		api_response_as_json = json.loads(r.text)
 	except:
 		if verbose:
 			print("[OPENTARGETS]: Something is broken with the Open Targets API")
-		pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
-							  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
-							  'gene_symbol'])
+		return df
 
 	# Extract the assodiated diseases info for this target
 	ad=pd.DataFrame.from_dict(api_response_as_json['data']['target']['associatedDiseases'])
+
+	# Check if we get zero results
+	if len(df)==0:
+		if verbose:
+			print("[OPENTARGETS]: No results returned from Open Targets API")
+		return df
 
 	# Extract the approved gene symbol for this target
 	gene_symbol=pd.DataFrame.from_dict(api_response_as_json['data']['target'])['approvedSymbol'][1]
