@@ -7,6 +7,8 @@ import os
 import time
 import sqlite3
 import urllib.request as urllib
+import requests
+import json
 from urllib.error import *
 
 import pandas as pd
@@ -17,7 +19,6 @@ from Bio.Blast import NCBIXML
 from Bio.Seq import Seq
 from Bio.SubsMat.MatrixInfo import blosum62
 from intermine.webservice import Service
-from opentargets import OpenTargetsClient
 from pathlib import Path
 
 from targetDB import drugg_errors
@@ -596,8 +597,12 @@ def get_ligands_to_do(chembl_code):
 
 	for i in res_lig_target.index:
 		if res_lig_target.loc[i]['lig_id'] in res_lig_in_db.index:
-			if int(str(res_lig_target.loc[i]['chembl_version']).split('_')[1]) <= int(
-					str(res_lig_in_db.loc[res_lig_target.loc[i]['lig_id']].chembl_version).split('_')[1]):
+			rhs=str(res_lig_in_db.loc[res_lig_target.loc[i]['lig_id']].chembl_version)
+			if '\n' in rhs:
+				rhs=rhs.split('\n')[1]
+			rhs=rhs.split('_')[1]
+			if int(str(res_lig_target.loc[i]['chembl_version']).split('_')[1]) <= int(rhs):
+					#(str(res_lig_in_db.loc[res_lig_target.loc[i]['lig_id']].chembl_version).split('_')[1])):
 				pass
 			else:
 				lig_to_do.append(res_lig_target.loc[i]['lig_id'])
@@ -662,10 +667,10 @@ def get_ligands_info():
 	  MOL.indication_class,
 	  MOL.usan_stem_definition AS class_def,
 	  PROP.alogp,
-	  PROP.acd_logd,
-	  PROP.acd_logp,
-	  PROP.acd_most_bpka,
-	  PROP.acd_most_apka,
+	  PROP.cx_logd,
+	  PROP.cx_logp,
+	  PROP.cx_most_bpka,
+	  PROP.cx_most_apka,
 	  PROP.hbd AS HBD,
 	  PROP.hba AS HBA,
 	  PROP.psa AS TPSA,
@@ -688,6 +693,9 @@ def get_ligands_info():
 	  ,version"""
 	df = pd.read_sql(sql_lig, con=connector)
 	connector.close()
+
+	rename = {'cx_logd':'acd_logd', 'cx_logp':'acd_logp', 'cx_most_bpka':'acd_most_bpka', 'cx_most_apka':'acd_most_apka'}
+	df.rename(columns=rename, inplace=True)
 
 	tdb_con = sqlite3.connect(targetDB)
 	df.to_sql('ligands', con=tdb_con, if_exists='append', index=False)
@@ -808,10 +816,10 @@ def pdb_blast(sequence, path, gene_id, gene='', pdb_list=None):
 	e_value_treshold = 0.0001
 	query_length = float(blast_record.query_length)
 	for alignment in blast_record.alignments:
-		pdb_code = alignment.title.split('|')[3]
+		pdb_code = alignment.hit_def.split(' ')[0].split('_')[0]
 		if pdb_code in pdb_list:
 			continue
-		chain_id = alignment.accession
+		chain_id = alignment.hit_def.split(' ')[0]
 		for hsp in alignment.hsps:
 			length = float(hsp.align_length)
 			percent_seq = round((length / query_length) * 100, 1)
@@ -909,8 +917,8 @@ def proteins_blast(sequence, gene_id, gene, path):
 		for hsp in alignment.hsps:
 			length = float(hsp.align_length)
 			neighbour_accession_code = alignment.accession
-			neighbour_gene_name = alignment.hit_id.split('|')[-1].split('_')[0]
-			neighbour_gene_species = alignment.hit_id.split('|')[-1].split('_')[1]
+			neighbour_gene_name = alignment.title.split('|')[-1].split('_')[0]
+			neighbour_gene_species = alignment.title.split('|')[-1].split('_')[1].split(' ')[0]
 			if neighbour_accession_code in list_of_accession_ID:
 				continue
 			else:
@@ -1030,46 +1038,101 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	df['Chemistry'] = chem
 	return df
 
-
 @ret.retryer(max_retries=10, timeout=10)
 def open_target_association(ensembl_id):
-	ot = OpenTargetsClient()
 	if ensembl_id == '':
-		return pd.DataFrame(columns=['affected_pathway','animal_model','genetic_association', 'known_drug', 'litterature_mining', 'rna_expression', 'somatic_mutation', 'overall_score','disease_name','disease_area','gene_symbol'])
-	associations = ot.get_associations_for_target(ensembl_id)
+		return pd.DataFrame(columns=['affected_pathway','animal_model','genetic_association', 'known_drug', 'literature', 'rna_expression', 'somatic_mutation', 'overall_score','disease_name','disease_area','gene_symbol'])
 
-	df = associations.to_dataframe()
+	# Create empty data frame for return
+	df = pd.DataFrame()
 
-	if df.empty:
-		return pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'litterature_mining',
-				         'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
-				         'gene_symbol'])
+	# Build GraphQL string to return gene symbol, a row for each associated disease plus scores
+	query_string = """
+	query target {
+	  target(ensemblId: \""""+ensembl_id+"""\") {
+		id
+		approvedSymbol
+		associatedDiseases {
+		  count
+		  rows {
+			score
+			disease {
+			  id
+			  name
+			  therapeuticAreas {
+				name
+			  }
+			}
+			datatypeScores {
+			  id
+			  score
+			}
+		  }
+		}
+	  }
+	}
+	"""
 
-	df = df[(df['is_direct'] == True)]
-	cols = ['target.gene_info.symbol', 'disease.efo_info.therapeutic_area.labels', 'disease.efo_info.label',
-	        'association_score.overall',
-	        'association_score.datatypes.genetic_association',
-	        'association_score.datatypes.known_drug',
-	        'association_score.datatypes.literature',
-	        'association_score.datatypes.animal_model',
-	        'association_score.datatypes.affected_pathway',
-	        'association_score.datatypes.rna_expression',
-	        'association_score.datatypes.somatic_mutation']
-	rename = {'association_score.datatypes.affected_pathway': 'affected_pathway',
-	          'association_score.datatypes.animal_model': 'animal_model',
-	          'association_score.datatypes.genetic_association': 'genetic_association',
-	          'association_score.datatypes.known_drug': 'known_drug',
-	          'association_score.datatypes.literature': 'litterature_mining',
-	          'association_score.datatypes.rna_expression': 'rna_expression',
-	          'association_score.datatypes.somatic_mutation': 'somatic_mutation',
-	          'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
-	          'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
-	df = df[cols]
+	# Set base URL of GraphQL API endpoint
+	base_url = "https://api.platform.opentargets.org/api/v4/graphql"
+
+	try:
+		# Perform POST request and check status code of response
+		r = requests.post(base_url, json={"query": query_string, "variables":{}})
+		if r.status_code!=200:
+			print("[OPENTARGETS]: Couldn't get results from Open Targets API")
+			pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
+								  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+								  'gene_symbol'])
+		# Transform API response into JSON
+		api_response_as_json = json.loads(r.text)
+	except:
+		if verbose:
+			print("[OPENTARGETS]: Something is broken with the Open Targets API")
+		pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
+							  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+							  'gene_symbol'])
+
+	# Extract the assodiated diseases info for this target
+	ad=pd.DataFrame.from_dict(api_response_as_json['data']['target']['associatedDiseases'])
+
+	# Extract the approved gene symbol for this target
+	gene_symbol=pd.DataFrame.from_dict(api_response_as_json['data']['target'])['approvedSymbol'][1]
+
+	# For each associated disease...
+	for row in ad['rows']:
+		# Extract the overall Open Targets score
+		overall_score = row['score']
+
+		# Extract the disease name
+		disease_name = row['disease']['name']
+		disease_areas=""
+
+		# And concatenate all disease areas received
+		for da in row['disease']['therapeuticAreas']:
+			if disease_areas=="":
+				disease_areas=da['name']
+			else:
+				disease_areas=disease_areas+"; "+da['name']
+
+		# Now build a dictionary to take the result
+		data={'affected_pathway':0.,'animal_model':0.,'genetic_association':0., 'known_drug':0.,
+			  'literature':0., 'rna_expression':0., 'somatic_mutation':0., 'overall_score':overall_score,
+			  'disease_name':disease_name,'disease_area':disease_areas,'gene_symbol':gene_symbol}
+
+		# Assign the scores received to the right places in the dictionary
+		for score in row['datatypeScores']:
+			data[score['id']] = score['score']
+
+		# Append the result to the data frame
+		df=df.append(data, ignore_index=True)
+
 	df = df.round(2)
-	df = df[df['association_score.overall'] > 0.05]
+	df = df[df['overall_score'] > 0.05]
+	rename = {'literature': 'litterature_mining'}
 	df.rename(columns=rename, inplace=True)
-	return df
 
+	return df
 
 def write_to_db(target, db_path):
 	if target.record is None:
@@ -1277,7 +1340,7 @@ def write_to_db(target, db_path):
 	# ========# FILLING THE CROSSREF TABLE #=========#
 
 	target.open_targets['target_id'] = target.swissprotID
-	target.open_targets.disease_area = target.open_targets.disease_area.apply(lambda x: ','.join(x))
+	target.open_targets.disease_area = target.open_targets.disease_area
 	target.open_targets.drop(columns=['gene_symbol'],inplace=True)
 	target.open_targets.to_sql('opentarget_association', con=connector, if_exists='append', index=False)
 
@@ -1606,21 +1669,21 @@ def main():
 			if Path(args.in_file).is_file():
 				with open(args.in_file, 'r') as gene_list:
 					list_of_genes = gene_list.readlines()
-					gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
+					gene_df,missing = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 				break
 			else:
 				print('ERROR : file inputed as argument [-i] does not exist')
 				sys.exit()
 		if args.gene:
 			list_of_genes = [args.gene]
-			gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
+			gene_df,missing = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
 		elif args.list_genes:
 			list_of_genes = args.list_genes.split(',')
-			gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
+			gene_df,missing = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
 		elif args.do_all:
-			gene_df = g2id.gene_to_id_all(targetDB_path=targetDB)
+			gene_df,missing = g2id.gene_to_id_all(targetDB_path=targetDB)
 			break
 
 	for g_id in gene_df.index:
