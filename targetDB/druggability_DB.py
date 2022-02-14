@@ -597,8 +597,12 @@ def get_ligands_to_do(chembl_code):
 
 	for i in res_lig_target.index:
 		if res_lig_target.loc[i]['lig_id'] in res_lig_in_db.index:
-			if int(str(res_lig_target.loc[i]['chembl_version']).split('_')[1]) <= int(
-					str(res_lig_in_db.loc[res_lig_target.loc[i]['lig_id']].chembl_version).split('_')[1]):
+			rhs=str(res_lig_in_db.loc[res_lig_target.loc[i]['lig_id']].chembl_version)
+			if '\n' in rhs:
+				rhs=rhs.split('\n')[1]
+			rhs=rhs.split('_')[1]
+			if int(str(res_lig_target.loc[i]['chembl_version']).split('_')[1]) <= int(rhs):
+					#(str(res_lig_in_db.loc[res_lig_target.loc[i]['lig_id']].chembl_version).split('_')[1])):
 				pass
 			else:
 				lig_to_do.append(res_lig_target.loc[i]['lig_id'])
