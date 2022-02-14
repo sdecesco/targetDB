@@ -1698,21 +1698,21 @@ def main():
 			if Path(args.in_file).is_file():
 				with open(args.in_file, 'r') as gene_list:
 					list_of_genes = gene_list.readlines()
-					gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
+					gene_df,missing = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 				break
 			else:
 				print('ERROR : file inputed as argument [-i] does not exist')
 				sys.exit()
 		if args.gene:
 			list_of_genes = [args.gene]
-			gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
+			gene_df,missing = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
 		elif args.list_genes:
 			list_of_genes = args.list_genes.split(',')
-			gene_df = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
+			gene_df,missing = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
 		elif args.do_all:
-			gene_df = g2id.gene_to_id_all(targetDB_path=targetDB)
+			gene_df,missing = g2id.gene_to_id_all(targetDB_path=targetDB)
 			break
 
 	for g_id in gene_df.index:
