@@ -7,6 +7,8 @@ import os
 import time
 import sqlite3
 import urllib.request as urllib
+import requests
+import json
 from urllib.error import *
 
 import pandas as pd
@@ -17,7 +19,6 @@ from Bio.Blast import NCBIXML
 from Bio.Seq import Seq
 from Bio.SubsMat.MatrixInfo import blosum62
 from intermine.webservice import Service
-from opentargets import OpenTargetsClient
 from pathlib import Path
 
 from targetDB import drugg_errors
@@ -1031,43 +1032,128 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	return df
 
 
+# @ret.retryer(max_retries=10, timeout=10)
+# def open_target_association(ensembl_id):
+# 	ot = OpenTargetsClient()
+# 	if ensembl_id == '':
+# 		return pd.DataFrame(columns=['affected_pathway','animal_model','genetic_association', 'known_drug', 'litterature_mining', 'rna_expression', 'somatic_mutation', 'overall_score','disease_name','disease_area','gene_symbol'])
+# 	associations = ot.get_associations_for_target(ensembl_id)
+#
+# 	df = associations.to_dataframe()
+#
+# 	if df.empty:
+# 		return pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'litterature_mining',
+# 				         'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+# 				         'gene_symbol'])
+#
+# 	df = df[(df['is_direct'] == True)]
+# 	cols = ['target.gene_info.symbol', 'disease.efo_info.therapeutic_area.labels', 'disease.efo_info.label',
+# 	        'association_score.overall',
+# 	        'association_score.datatypes.genetic_association',
+# 	        'association_score.datatypes.known_drug',
+# 	        'association_score.datatypes.literature',
+# 	        'association_score.datatypes.animal_model',
+# 	        'association_score.datatypes.affected_pathway',
+# 	        'association_score.datatypes.rna_expression',
+# 	        'association_score.datatypes.somatic_mutation']
+# 	rename = {'association_score.datatypes.affected_pathway': 'affected_pathway',
+# 	          'association_score.datatypes.animal_model': 'animal_model',
+# 	          'association_score.datatypes.genetic_association': 'genetic_association',
+# 	          'association_score.datatypes.known_drug': 'known_drug',
+# 	          'association_score.datatypes.literature': 'litterature_mining',
+# 	          'association_score.datatypes.rna_expression': 'rna_expression',
+# 	          'association_score.datatypes.somatic_mutation': 'somatic_mutation',
+# 	          'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
+# 	          'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
+# 	df = df[cols]
+# 	df = df.round(2)
+# 	df = df[df['association_score.overall'] > 0.05]
+# 	df.rename(columns=rename, inplace=True)
+# 	return df
+
 @ret.retryer(max_retries=10, timeout=10)
 def open_target_association(ensembl_id):
-	ot = OpenTargetsClient()
 	if ensembl_id == '':
-		return pd.DataFrame(columns=['affected_pathway','animal_model','genetic_association', 'known_drug', 'litterature_mining', 'rna_expression', 'somatic_mutation', 'overall_score','disease_name','disease_area','gene_symbol'])
-	associations = ot.get_associations_for_target(ensembl_id)
+		return pd.DataFrame(columns=['affected_pathway','animal_model','genetic_association', 'known_drug', 'literature', 'rna_expression', 'somatic_mutation', 'overall_score','disease_name','disease_area','gene_symbol'])
 
-	df = associations.to_dataframe()
+	# Create empty data frame for return
+	df = pd.DataFrame()
 
-	if df.empty:
-		return pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'litterature_mining',
-					 'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
-					 'gene_symbol'])
+	# Build GraphQL string to return gene symbol, a row for each associated disease plus scores
+	query_string = """
+	query target {
+	  target(ensemblId: \""""+ensembl_id+"""\") {
+		id
+		approvedSymbol
+		associatedDiseases {
+		  count
+		  rows {
+			score
+			disease {
+			  id
+			  name
+			  therapeuticAreas {
+				name
+			  }
+			}
+			datatypeScores {
+			  id
+			  score
+			}
+		  }
+		}
+	  }
+	}
+	"""
 
-	df = df[(df['is_direct'] == True)]
-	cols = ['target.gene_info.symbol', 'disease.efo_info.therapeutic_area.labels', 'disease.efo_info.label',
-		'association_score.overall',
-		'association_score.datatypes.genetic_association',
-		'association_score.datatypes.known_drug',
-		'association_score.datatypes.literature',
-		'association_score.datatypes.animal_model',
-		'association_score.datatypes.affected_pathway',
-		'association_score.datatypes.rna_expression',
-		'association_score.datatypes.somatic_mutation']
-	rename = {'association_score.datatypes.affected_pathway': 'affected_pathway',
-		  'association_score.datatypes.animal_model': 'animal_model',
-		  'association_score.datatypes.genetic_association': 'genetic_association',
-		  'association_score.datatypes.known_drug': 'known_drug',
-		  'association_score.datatypes.literature': 'litterature_mining',
-		  'association_score.datatypes.rna_expression': 'rna_expression',
-		  'association_score.datatypes.somatic_mutation': 'somatic_mutation',
-		  'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
-		  'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
-	df = df[cols]
+	# Set base URL of GraphQL API endpoint
+	base_url = "https://api.platform.opentargets.org/api/v4/graphql"
+
+	# Perform POST request and check status code of response
+	r = requests.post(base_url, json={"query": query_string, "variables":{}})
+
+	# Transform API response into JSON
+	api_response_as_json = json.loads(r.text)
+
+	# Extract the assodiated diseases info for this target
+	ad=pd.DataFrame.from_dict(api_response_as_json['data']['target']['associatedDiseases'])
+
+	# Extract the approved gene symbol for this target
+	gene_symbol=pd.DataFrame.from_dict(api_response_as_json['data']['target'])['approvedSymbol'][1]
+
+	# For each associated disease...
+	for row in ad['rows']:
+		# Extract the overall Open Targets score
+		overall_score = row['score']
+
+		# Extract the disease name
+		disease_name = row['disease']['name']
+		disease_areas=""
+
+		# And concatenate all disease areas received
+		for da in row['disease']['therapeuticAreas']:
+			if disease_areas=="":
+				disease_areas=da['name']
+			else:
+				disease_areas=disease_areas+"; "+da['name']
+
+		# Now build a dictionary to take the result
+		data={'affected_pathway':0.,'animal_model':0.,'genetic_association':0., 'known_drug':0.,
+			  'literature':0., 'rna_expression':0., 'somatic_mutation':0., 'overall_score':overall_score,
+			  'disease_name':disease_name,'disease_area':disease_areas,'gene_symbol':gene_symbol}
+
+		# Assign the scores received to the right places in the dictionary
+		for score in row['datatypeScores']:
+			data[score['id']] = score['score']
+
+		# Append the result to the data frame
+		df=df.append(data, ignore_index=True)
+
 	df = df.round(2)
-	df = df[df['association_score.overall'] > 0.05]
+	df = df[df['overall_score'] > 0.05]
+	rename = {'literature': 'litterature_mining'}
 	df.rename(columns=rename, inplace=True)
+
 	return df
 
 
