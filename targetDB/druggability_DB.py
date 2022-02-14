@@ -84,7 +84,7 @@ def get_crossref_pdb_go_chembl(record):
 				chain[i] = str(chain[i]).strip(' ')
 			chain = list(set(chain))
 			PDB_list.loc[ref[1]] = {'PDB_code': ref[1], 'Technique': ref[2], 'Resolution': ref[3],
-			                    'Chain': chain, 'Domain': [], 'path': ''}
+					    'Chain': chain, 'Domain': [], 'path': ''}
 		elif ref[0] == 'GO':
 			GO = ref[2].split(':')
 			if GO[0] == 'P':
@@ -125,12 +125,12 @@ def get_humanmine_data(gene):
 		disease_df = pd.DataFrame(columns=['disease', 'disease_id'])
 		phenotypes_df = pd.DataFrame(
 			columns=['gene', 'organism', 'Allele_id', 'Phenotype', 'Phenotype_desc', 'genotype', 'zygosity',
-			         'Allele_symbol', 'Allele_type'])
+				 'Allele_symbol', 'Allele_type'])
 		differential_exp_diseases_df = pd.DataFrame(
 			columns=['Condition', 'T_statistic', 'expression_status', 'p_value'])
 		differential_exp_tissues_df = pd.DataFrame(columns=['T_statistic', 'Tissue', 'expression_status', 'p_value'])
 		gwas_df = pd.DataFrame(columns=['doi', 'first_author', 'organism', 'p_value', 'phenotype',
-		                                'publication_year', 'pubmed_id'])
+						'publication_year', 'pubmed_id'])
 		return disease_df, phenotypes_df, differential_exp_diseases_df, differential_exp_tissues_df, gwas_df, pathways_df
 
 	query = service.new_query("Gene")
@@ -170,7 +170,7 @@ def get_humanmine_data(gene):
 	if phenotypes_df.empty:
 		phenotypes_df = pd.DataFrame(
 			columns=['gene', 'organism', 'Allele_id', 'Phenotype', 'Phenotype_desc', 'genotype', 'zygosity',
-			         'Allele_symbol', 'Allele_type'])
+				 'Allele_symbol', 'Allele_type'])
 
 	query = service.new_query("Gene")
 	query.add_view(
@@ -212,14 +212,14 @@ def get_humanmine_data(gene):
 	query.add_constraint("results.associatedGenes.id", "=", primary_id, code="A")
 	for row in query.rows():
 		gwas.append({'p_value': row["results.pValue"], 'phenotype': row["results.phenotype"],
-		             'first_author': row["firstAuthor"], 'pubmed_id': row["publication.pubMedId"],
-		             'organism': row["results.associatedGenes.organism.shortName"],
-		             'publication_year': row["publication.year"], 'doi': row["publication.doi"]})
+			     'first_author': row["firstAuthor"], 'pubmed_id': row["publication.pubMedId"],
+			     'organism': row["results.associatedGenes.organism.shortName"],
+			     'publication_year': row["publication.year"], 'doi': row["publication.doi"]})
 
 	gwas_df = pd.DataFrame.from_records(gwas)
 	if gwas_df.empty:
 		gwas_df = pd.DataFrame(columns=['doi', 'first_author', 'organism', 'p_value', 'phenotype',
-		                                'publication_year', 'pubmed_id'])
+						'publication_year', 'pubmed_id'])
 
 	query = service.new_query("Gene")
 	query.add_view("pathways.name", "pathways.dataSets.name")
@@ -268,18 +268,18 @@ def get_domains(record=None, gene_id=None, chembl_id=None):
 	if chembl_id:
 		connector = sqlite3.connect(chembl_24)
 		query = "SELECT CD.start_position,CD.end_position,DOM.domain_name,DOM.source_domain_id,DOM.domain_type FROM target_dictionary " \
-		        "TD,target_components TC,domains DOM,component_domains CD WHERE TD.chembl_id='%s' AND TD.tid=TC.tid AND " \
-		        "TC.component_id=CD.component_id AND DOM.domain_id=CD.domain_id GROUP BY TD.chembl_id,CD.domain_id" % chembl_id
+			"TD,target_components TC,domains DOM,component_domains CD WHERE TD.chembl_id='%s' AND TD.tid=TC.tid AND " \
+			"TC.component_id=CD.component_id AND DOM.domain_id=CD.domain_id GROUP BY TD.chembl_id,CD.domain_id" % chembl_id
 		domains_df = pd.read_sql(query, con=connector)
 		connector.close()
 		for i in domains_df.index:
 			domain_id = str(gid) + str(domains_df.loc[i].start_position) + str(
 				domains_df.loc[i].end_position) + '_' + domains_df.loc[i].source_domain_id
 			domain.append({'Start': int(domains_df.loc[i].start_position), 'Stop': int(domains_df.loc[i].end_position),
-			               'name': domains_df.loc[i].domain_name,
-			               'length': int(domains_df.end_position.loc[i]) - int(domains_df.start_position.loc[i]),
-			               'domain_id': domain_id, 'source_name': domains_df.domain_type.loc[i],
-			               'Source_id': domains_df.source_domain_id.loc[i]})
+				       'name': domains_df.loc[i].domain_name,
+				       'length': int(domains_df.end_position.loc[i]) - int(domains_df.start_position.loc[i]),
+				       'domain_id': domain_id, 'source_name': domains_df.domain_type.loc[i],
+				       'Source_id': domains_df.source_domain_id.loc[i]})
 
 		items_to_delete = []
 		for i in range(len(domain)):
@@ -300,12 +300,12 @@ def get_domains(record=None, gene_id=None, chembl_id=None):
 def get_chembl_info(chembl_id):
 	connector = sqlite3.connect(chembl_24)
 	query = "SELECT PC.pref_name ,PC.short_name ,PC.protein_class_desc ,group_concat(DISTINCT(" \
-	        "CSYN.component_synonym)) AS Synonym FROM target_dictionary TD, target_components TC, " \
-	        "component_sequences CS, component_class CC, protein_classification PC, " \
-	        "component_synonyms CSYN WHERE TD.chembl_id='%s' AND TD.tid=TC.tid AND " \
-	        "TC.component_id=CS.component_id AND TC.component_id=CC.component_id AND " \
-	        "TC.component_id=CSYN.component_id AND CC.protein_class_id=PC.protein_class_id GROUP BY " \
-	        "TD.chembl_id" % chembl_id
+		"CSYN.component_synonym)) AS Synonym FROM target_dictionary TD, target_components TC, " \
+		"component_sequences CS, component_class CC, protein_classification PC, " \
+		"component_synonyms CSYN WHERE TD.chembl_id='%s' AND TD.tid=TC.tid AND " \
+		"TC.component_id=CS.component_id AND TC.component_id=CC.component_id AND " \
+		"TC.component_id=CSYN.component_id AND CC.protein_class_id=PC.protein_class_id GROUP BY " \
+		"TD.chembl_id" % chembl_id
 	entry_info = pd.read_sql(query, con=connector)
 	connector.close()
 	entry_info.protein_class_desc = entry_info.protein_class_desc.str.replace('  ', ' -> ')
@@ -363,9 +363,9 @@ def get_variants(record, domains):
 				except IndexError:
 					comment = '(' + str(feat[3]).split('(')[0]
 			modifications.loc[feat[4]] = {'mod_id': feat[4], 'mod_type': str(feat[4]).split('_')[0], 'start': feat[1],
-			                              'stop': feat[2],
-			                              'previous': previous,
-			                              'new': new, 'action': action, 'comment': comment, 'domains': []}
+						      'stop': feat[2],
+						      'previous': previous,
+						      'new': new, 'action': action, 'comment': comment, 'domains': []}
 		if feat[0] == 'MUTAGEN':
 			if str(feat[3]).startswith('Missing'):
 				action = 'remove'
@@ -385,9 +385,9 @@ def get_variants(record, domains):
 					comment = str(feat[3]).split(':', 1)[0]
 				action = 'replace'
 			modifications.loc['MUTAGEN_' + str(feat[1])] = {'mod_id': 'MUTAGEN_' + str(feat[1]), 'mod_type': 'MUTAGEN',
-			                                                'start': feat[1], 'stop': feat[2], 'previous': previous,
-			                                                'new': new, 'action': action, 'comment': comment,
-			                                                'domains': []}
+									'start': feat[1], 'stop': feat[2], 'previous': previous,
+									'new': new, 'action': action, 'comment': comment,
+									'domains': []}
 	for i in domains.index:
 		for m in modifications.index:
 			if modifications.loc[m]['start'] >= domains.Start.loc[i] and modifications.loc[m]['stop'] <= \
@@ -398,7 +398,7 @@ def get_variants(record, domains):
 
 	isoforms = pd.DataFrame(
 		columns=['name', 'isoid', 'seq_mod', 'Canonical', 'sequence', 'seq_list', 'n_residues', 'Score', 'Identity',
-		         'Gaps'])
+			 'Gaps'])
 	for item in record.comments:
 		if str(item).startswith('ALTERNATIVE'):
 			splitted = str(item).split('; Name=')[1:]
@@ -474,10 +474,10 @@ def align(sequence1, sequence2, end_gaps=True, print_align=False):
 		return {'score': 0, 'identity': 'too long', 'gaps': 0}
 
 	alignments = pairwise2.align.globalds(seq1, seq2, blosum62, -10, -0.5, one_alignment_only=True,
-	                                      penalize_end_gaps=(end_gaps, end_gaps))
+					      penalize_end_gaps=(end_gaps, end_gaps))
 	if not alignments:
 		alignments = pairwise2.align.globalds(seq1, seq2, blosum62, -10, -0.5, one_alignment_only=True,
-		                                      penalize_end_gaps=(False, False))
+						      penalize_end_gaps=(False, False))
 	if not alignments:
 		return None
 	try:
@@ -522,7 +522,7 @@ def get_pdb(list_of_pdb, path):
 				pass
 				if verbose:
 					print('[ERROR]: ' + str(k) + '.pdb file not found (do not exist or is '
-					                             'too big)')
+								     'too big)')
 	if verbose:
 		print('[PDB DOWNLOAD DONE]')
 
@@ -552,10 +552,10 @@ def get_ligands_to_do(chembl_code):
 	# =====================# GETTING THE LIST OF LIGAND ASSOCIATED TO  THE TARGET #==========================#
 	connector = sqlite3.connect(chembl_24)
 	query_lig_target = "SELECT TD.chembl_id AS target_id,MOL.chembl_id AS lig_id,version.name as " \
-	                   "chembl_version FROM target_dictionary TD,activities BIO,assays AC," \
-	                   "molecule_dictionary MOL,version WHERE TD.chembl_id='%s' AND TD.tid=AC.tid AND " \
-	                   "AC.assay_id=BIO.assay_id AND BIO.value is not null AND " \
-	                   "BIO.molregno=MOL.molregno" % chembl_code
+			   "chembl_version FROM target_dictionary TD,activities BIO,assays AC," \
+			   "molecule_dictionary MOL,version WHERE TD.chembl_id='%s' AND TD.tid=AC.tid AND " \
+			   "AC.assay_id=BIO.assay_id AND BIO.value is not null AND " \
+			   "BIO.molregno=MOL.molregno" % chembl_code
 
 	res_lig_target = pd.read_sql(query_lig_target, con=connector)
 	res_lig_target.drop_duplicates(['lig_id'], inplace=True)
@@ -776,7 +776,7 @@ def pdb_blast(sequence, path, gene_id, gene='', pdb_list=None):
 	if verbose:
 		print('[3D BLAST]:' + gene + '(' + gene_id + ')')
 	columns = ['PDB_code', 'seq_percent', 'similarity', 'Chain_id', 'chain_letter', 'gene', 'organism', 'uniprot_id',
-	           'path']
+		   'path']
 	alternate_pdb = pd.DataFrame(columns=columns)
 	if blast_file.is_file():
 		if ((((time.time() - blast_file.stat().st_mtime) / 60) / 60) / 24) <= 15:
@@ -903,7 +903,7 @@ def proteins_blast(sequence, gene_id, gene, path):
 	query_length = float(blast_record.query_length)
 	list_of_neighbours = pd.DataFrame(
 		columns=['Query_target_id', 'Hit_gene_id', 'sequence_in_common', 'similarity', 'Hit_gene_name',
-		         'Hit_gene_species', 'Unique_ID'])
+			 'Hit_gene_species', 'Unique_ID'])
 	list_of_accession_ID = []
 	for alignment in blast_record.alignments:
 		for hsp in alignment.hsps:
@@ -923,12 +923,12 @@ def proteins_blast(sequence, gene_id, gene, path):
 			if hsp.score > 200 and hsp.expect < e_value_treshold and (
 					length / query_length) > 0.5 and similarity >= 40 and neighbour_accession_code != gene_id:
 				list_of_neighbours.loc[gene_id + '_' + neighbour_accession_code] = {'Query_target_id': gene_id,
-				                                                                    'Hit_gene_id': neighbour_accession_code,
-				                                                                    'sequence_in_common': percent_seq,
-				                                                                    'similarity': similarity,
-				                                                                    'Hit_gene_name': neighbour_gene_name,
-				                                                                    'Hit_gene_species': neighbour_gene_species,
-				                                                                    'Unique_ID': gene_id + '_' + neighbour_accession_code}
+												    'Hit_gene_id': neighbour_accession_code,
+												    'sequence_in_common': percent_seq,
+												    'similarity': similarity,
+												    'Hit_gene_name': neighbour_gene_name,
+												    'Hit_gene_species': neighbour_gene_species,
+												    'Unique_ID': gene_id + '_' + neighbour_accession_code}
 
 	return list_of_neighbours
 
@@ -936,27 +936,27 @@ def proteins_blast(sequence, gene_id, gene, path):
 @ret.retryer_pubmed(max_retries=10, timeout=5)
 def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	dict_medline = {"AB": "Abstract", "CI": "Copyright Information", "AD": "Affiliation", "AUID": "Author ID",
-	                "IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
-	                "FAU": "Full Author", "CN": "Corporate Author", "DCOM": "Date Completed", "DA": "Date Created",
-	                "LR": "Date Last Revised", "DEP": "Date of Electronic Publication", "DP": "Date of Publication",
-	                "EDAT": "Entrez Date", "GS": "Gene Symbol", "GN": "General Note", "GR": "Grant Number",
-	                "IR": "Investigator Name", "FIR": "Full Investigator Name", "IS": "ISSN", "IP": "Issue",
-	                "TA": "Journal Title Abbreviation", "JT": "Journal Title", "LA": "Language",
-	                "LID": "Location Identifier", "MID": "Manuscript Identifier", "MHDA": "MeSH Date",
-	                "MH": "MeSH Terms", "JID": "NLM Unique ID", "RF": "Number of References", "OAB": "Other Abstract",
-	                "OCI": "Other Copyright Information", "OID": "Other ID", "OT": "Other Term",
-	                "OTO": "Other Term Owner", "OWN": "Owner", "PG": "Pagination", "PS": "Personal Name as Subject",
-	                "FPS": "Full Personal Name as Subject", "PL": "Place of Publication",
-	                "PHST": "Publication History Status", "PST": "Publication Status", "PT": "Publication Type",
-	                "PUBM": "Publishing Model", "PMC": "PubMed Central Identifier", "PMID": "PMID",
-	                "RN": "Registry Number/EC Number", "NM": "Substance Name", "SI": "Secondary Source ID",
-	                "SO": "Source", "SFM": "Space Flight Mission", "STAT": "Status", "SB": "Subset", "TI": "Title",
-	                "TT": "Transliterated Title", "VI": "Volume", "CON": "Comment on", "CIN": "Comment in",
-	                "EIN": "Erratum in", "EFR": "Erratum for", "CRI": "Corrected and Republished in",
-	                "CRF": "Corrected and Republished from", "PRIN": "Partial retraction in",
-	                "PROF": "Partial retraction of", "RPI": "Republished in", "RPF": "Republished from",
-	                "RIN": "Retraction in", "ROF": "Retraction of", "UIN": "Update in", "UOF": "Update of",
-	                "SPIN": "Summary for patients in", "ORI": "Original report in"}
+			"IRAD": "Investigator Affiliation", "AID": "Article Identifier", "AU": "Author",
+			"FAU": "Full Author", "CN": "Corporate Author", "DCOM": "Date Completed", "DA": "Date Created",
+			"LR": "Date Last Revised", "DEP": "Date of Electronic Publication", "DP": "Date of Publication",
+			"EDAT": "Entrez Date", "GS": "Gene Symbol", "GN": "General Note", "GR": "Grant Number",
+			"IR": "Investigator Name", "FIR": "Full Investigator Name", "IS": "ISSN", "IP": "Issue",
+			"TA": "Journal Title Abbreviation", "JT": "Journal Title", "LA": "Language",
+			"LID": "Location Identifier", "MID": "Manuscript Identifier", "MHDA": "MeSH Date",
+			"MH": "MeSH Terms", "JID": "NLM Unique ID", "RF": "Number of References", "OAB": "Other Abstract",
+			"OCI": "Other Copyright Information", "OID": "Other ID", "OT": "Other Term",
+			"OTO": "Other Term Owner", "OWN": "Owner", "PG": "Pagination", "PS": "Personal Name as Subject",
+			"FPS": "Full Personal Name as Subject", "PL": "Place of Publication",
+			"PHST": "Publication History Status", "PST": "Publication Status", "PT": "Publication Type",
+			"PUBM": "Publishing Model", "PMC": "PubMed Central Identifier", "PMID": "PMID",
+			"RN": "Registry Number/EC Number", "NM": "Substance Name", "SI": "Secondary Source ID",
+			"SO": "Source", "SFM": "Space Flight Mission", "STAT": "Status", "SB": "Subset", "TI": "Title",
+			"TT": "Transliterated Title", "VI": "Volume", "CON": "Comment on", "CIN": "Comment in",
+			"EIN": "Erratum in", "EFR": "Erratum for", "CRI": "Corrected and Republished in",
+			"CRF": "Corrected and Republished from", "PRIN": "Partial retraction in",
+			"PROF": "Partial retraction of", "RPI": "Republished in", "RPF": "Republished from",
+			"RIN": "Retraction in", "ROF": "Retraction of", "UIN": "Update in", "UOF": "Update of",
+			"SPIN": "Summary for patients in", "ORI": "Original report in"}
 	pubmed_url = 'https://www.ncbi.nlm.nih.gov/pubmed/'
 
 	Entrez.email = email
@@ -980,15 +980,15 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	df = pd.DataFrame.from_records(data)
 	df.rename(index=str, columns=dict_medline, inplace=True)
 	pub_type_list = ['Journal Article', 'Case Reports', 'Clinical Trial', 'Comparative Study', 'Letter',
-	                 'Meta-Analysis', 'Review']
+			 'Meta-Analysis', 'Review']
 	for pub_type in pub_type_list:
 		df[pub_type] = [pub_type in i for i in df['Publication Type'].values]
 	columns_to_keep = ['Abstract', 'Affiliation', 'Author', 'Date of Publication',
-	                   'Journal Title', 'MeSH Terms', 'Other Term',
-	                   'Other Term Owner', 'Place of Publication', 'PMID',
-	                   'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
-	                   'Journal Article', 'Case Reports', 'Clinical Trial',
-	                   'Comparative Study', 'Letter', 'Meta-Analysis', 'Review']
+			   'Journal Title', 'MeSH Terms', 'Other Term',
+			   'Other Term Owner', 'Place of Publication', 'PMID',
+			   'Subset', 'Source', 'Journal Title Abbreviation', 'Title', 'Volume',
+			   'Journal Article', 'Case Reports', 'Clinical Trial',
+			   'Comparative Study', 'Letter', 'Meta-Analysis', 'Review']
 	for i in columns_to_keep:
 		if i not in df.columns:
 			df[i] = ''
@@ -1042,28 +1042,28 @@ def open_target_association(ensembl_id):
 
 	if df.empty:
 		return pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'litterature_mining',
-				         'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
-				         'gene_symbol'])
+					 'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+					 'gene_symbol'])
 
 	df = df[(df['is_direct'] == True)]
 	cols = ['target.gene_info.symbol', 'disease.efo_info.therapeutic_area.labels', 'disease.efo_info.label',
-	        'association_score.overall',
-	        'association_score.datatypes.genetic_association',
-	        'association_score.datatypes.known_drug',
-	        'association_score.datatypes.literature',
-	        'association_score.datatypes.animal_model',
-	        'association_score.datatypes.affected_pathway',
-	        'association_score.datatypes.rna_expression',
-	        'association_score.datatypes.somatic_mutation']
+		'association_score.overall',
+		'association_score.datatypes.genetic_association',
+		'association_score.datatypes.known_drug',
+		'association_score.datatypes.literature',
+		'association_score.datatypes.animal_model',
+		'association_score.datatypes.affected_pathway',
+		'association_score.datatypes.rna_expression',
+		'association_score.datatypes.somatic_mutation']
 	rename = {'association_score.datatypes.affected_pathway': 'affected_pathway',
-	          'association_score.datatypes.animal_model': 'animal_model',
-	          'association_score.datatypes.genetic_association': 'genetic_association',
-	          'association_score.datatypes.known_drug': 'known_drug',
-	          'association_score.datatypes.literature': 'litterature_mining',
-	          'association_score.datatypes.rna_expression': 'rna_expression',
-	          'association_score.datatypes.somatic_mutation': 'somatic_mutation',
-	          'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
-	          'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
+		  'association_score.datatypes.animal_model': 'animal_model',
+		  'association_score.datatypes.genetic_association': 'genetic_association',
+		  'association_score.datatypes.known_drug': 'known_drug',
+		  'association_score.datatypes.literature': 'litterature_mining',
+		  'association_score.datatypes.rna_expression': 'rna_expression',
+		  'association_score.datatypes.somatic_mutation': 'somatic_mutation',
+		  'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
+		  'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
 	df = df[cols]
 	df = df.round(2)
 	df = df[df['association_score.overall'] > 0.05]
@@ -1102,7 +1102,7 @@ def write_to_db(target, db_path):
 	target.alternate_pdb['Query_target_id'] = target.swissprotID
 	target.alternate_pdb.rename(
 		columns={'PDB_code': 'Hit_PDB_code', 'Chain_id': 'Hit_Chain_id', 'chain_letter': 'Chain_Letter',
-		         'gene': 'Hit_gene_name', 'organism': 'Hit_gene_species', 'uniprot_id': 'Hit_gene_id'}, inplace=True)
+			 'gene': 'Hit_gene_name', 'organism': 'Hit_gene_species', 'uniprot_id': 'Hit_gene_id'}, inplace=True)
 	target.alternate_pdb.drop(columns=['seq_percent', 'path'], inplace=True)
 	target.alternate_pdb[
 		'Unique_ID'] = target.alternate_pdb.Query_target_id + '_' + target.alternate_pdb.Hit_gene_id + '_' + target.alternate_pdb.Hit_Chain_id
@@ -1138,7 +1138,7 @@ def write_to_db(target, db_path):
 	isoform_mods = pd.DataFrame.from_records(isoforms_mods)
 	target.isoforms['Target_id'] = target.swissprotID
 	target.isoforms.rename(columns={'isoid': 'Isoform_id', 'name': 'Isoform_name', 'sequence': 'Sequence'},
-	                       inplace=True)
+			       inplace=True)
 	target.isoforms.drop(columns=['seq_list', 'seq_mod'], inplace=True)
 	target.isoforms.to_sql('Isoforms', con=connector, if_exists='append', index=False)
 	isoform_mods.to_sql('isoform_modifications', con=connector, if_exists='append', index=False)
@@ -1168,8 +1168,8 @@ def write_to_db(target, db_path):
 				pdb_domains.loc[chain] = {'Chain_id': chain, 'Domain_id': domain}
 		target.pdb_info.reset_index(inplace=True)
 		target.pdb_info.rename(columns={'index': 'Chain_id', 'chain_name': 'Chain', 'equal': 'equal_chains',
-		                                'length': 'n_residues', 'sequence': 'Sequence', 'start': 'Start',
-		                                'start_stop_pairs': 'start_stop', 'stop': 'Stop'}, inplace=True)
+						'length': 'n_residues', 'sequence': 'Sequence', 'start': 'Start',
+						'start_stop_pairs': 'start_stop', 'stop': 'Stop'}, inplace=True)
 		target.pdb_info.drop(columns=['domain', 'domain_id', 'seq_list'], inplace=True)
 
 		target.pdb_info.to_sql('PDB_Chains', con=connector, if_exists='append', index=False)
@@ -1208,8 +1208,8 @@ def write_to_db(target, db_path):
 	if target.protein_expression is not None:
 		protein_level = pd.DataFrame.from_records(target.protein_expression.protein_lvl['Cells'])
 		protein_selectivity = pd.DataFrame({'Selectivity_entropy': [target.protein_expression.selective_entropy],
-		                                    'max_organ': [target.protein_expression.max_organ],
-		                                    'Target_id': [target.swissprotID]})
+						    'max_organ': [target.protein_expression.max_organ],
+						    'Target_id': [target.swissprotID]})
 
 		protein_level.cell_id = target.swissprotID + '_' + protein_level.cell_id
 		protein_level['Target_id'] = target.swissprotID
@@ -1289,7 +1289,7 @@ def write_to_db(target, db_path):
 
 class Target:
 	def __init__(self, gname, uniprot_id=None, ensembl_id=None, hgnc_id=None, v=False,
-	             db_files_path=None, chembl=None, target_db=None, blast_cores=8):
+		     db_files_path=None, chembl=None, target_db=None, blast_cores=8):
 		global verbose
 		global chembl_24
 		global targetDB
@@ -1387,7 +1387,7 @@ class Target:
 			self.prot_info.index = self.prot_info.Target_id
 			self.prot_info.rename(
 				columns={'Synonym': 'Synonyms', 'Class_name': 'Protein_class', 'Class_short': 'Protein_class_short',
-				         'Class_description': 'Protein_class_desc'}, inplace=True)
+					 'Class_description': 'Protein_class_desc'}, inplace=True)
 			self.prot_info['Gene_name'] = self.gene
 			self.prot_info['Species'] = self.record.organism
 			self.prot_info['species_id'] = self.record.taxonomy_id[0]
@@ -1431,7 +1431,7 @@ class Target:
 				# =====================# GET POCKETS (source: fpockets) ======================#
 
 				self.pockets = pocket.get_pockets(self.path, sphere_size=3, pdb_info=self.pdb, domain=self.domain,
-				                                  uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
+								  uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 				self.druggable_pockets = self.pockets['pockets'][self.pockets['pockets'].druggable == 'TRUE'].copy()
 
 			pdb_super_list = list(res_pdb.PDB_code) + list(self.pdb.index)
@@ -1479,18 +1479,18 @@ class Target:
 			# ============================================================================#
 
 			self.alternate_pdb = pdb_blast(self.sequence, self.path, self.swissprotID, pdb_list=pdb_super_list,
-			                               gene=self.gene)
+						       gene=self.gene)
 			very_close_pdb = self.alternate_pdb[self.alternate_pdb.similarity >= 90.0].copy()
 
 			if res_pockets.empty and self.druggable_pockets.empty:
 				self.alternate_pockets = pocket.get_pockets(self.path, sphere_size=3, alternate=True,
-				                                            alternate_pdb=self.alternate_pdb,
-				                                            uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
+									    alternate_pdb=self.alternate_pdb,
+									    uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 			else:
 				if not very_close_pdb.empty:
 					self.alternate_pockets = pocket.get_pockets(self.path, sphere_size=3, alternate=True,
-					                                            alternate_pdb=very_close_pdb,
-					                                            uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
+										    alternate_pdb=very_close_pdb,
+										    uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 
 			self.neighbours = proteins_blast(self.sequence, self.swissprotID, self.gene, self.path)
 
@@ -1517,22 +1517,22 @@ def parse_args():
 	parser = argparse.ArgumentParser()
 	parser.add_argument('-g', '--gene', help='enter a single gene name', metavar='')
 	parser.add_argument('-i', '--in_file', help='Name of the input file with a list of genes (.txt - 1 gene per line)',
-	                    metavar='')
+			    metavar='')
 	parser.add_argument('-l', '--list_genes', help='Enter a list of gene name separated by a ","', metavar='')
 	parser.add_argument('-a', '--do_all', help='Use this option to create a database with all human genes (list coming from HGNC)', action='store_true', default=False)
 	parser.add_argument('-s', '--sphere_size', help='enter a value for the probe size of the pocket finder tool ('
-	                                                'default = 3.0)', metavar='', type=float, default=3.0)
+							'default = 3.0)', metavar='', type=float, default=3.0)
 	parser.add_argument('-v', '--verbose', help="Print information", action='store_true', default=False)
 
 	parser.add_argument('-update', '--update', help="Update record if already in database (default: No)",
-	                    action='store_true', default=False)
+			    action='store_true', default=False)
 	parser.add_argument('-blastcore', '--num_core',
-	                    help='Enter the value of processor core to use for the blast search (default=8)', metavar='',
-	                    type=int, default=8)
+			    help='Enter the value of processor core to use for the blast search (default=8)', metavar='',
+			    type=int, default=8)
 	parser.add_argument('-update_config', '--update_config', help="use this if you want to update the config file",
-	                    action='store_true', default=False)
+			    action='store_true', default=False)
 	parser.add_argument('-create_db', '--create_db', help='Use this option to create an empty targetDB database',
-	                    action='store_true', default=False)
+			    action='store_true', default=False)
 
 	arguments = parser.parse_args()
 	if not arguments.gene and not arguments.in_file and not arguments.list_genes and not arguments.do_all:
