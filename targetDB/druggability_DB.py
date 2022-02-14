@@ -1119,7 +1119,7 @@ def open_target_association(ensembl_id):
 	try:
 		# Perform POST request and check status code of response
 		r = requests.post(base_url, json={"query": query_string, "variables":{}})
-		if r.status_code<>200:
+		if r.status_code!=200:
 			print("[OPENTARGETS]: Couldn't get results from Open Targets API")
 			pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
 								  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
