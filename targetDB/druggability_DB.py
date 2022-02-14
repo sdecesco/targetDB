@@ -667,10 +667,10 @@ def get_ligands_info():
 	  MOL.indication_class,
 	  MOL.usan_stem_definition AS class_def,
 	  PROP.alogp,
-	  PROP.acd_logd,
-	  PROP.acd_logp,
-	  PROP.acd_most_bpka,
-	  PROP.acd_most_apka,
+	  PROP.cx_logd,
+	  PROP.cx_logp,
+	  PROP.cx_most_bpka,
+	  PROP.cx_most_apka,
 	  PROP.hbd AS HBD,
 	  PROP.hba AS HBA,
 	  PROP.psa AS TPSA,
@@ -693,6 +693,9 @@ def get_ligands_info():
 	  ,version"""
 	df = pd.read_sql(sql_lig, con=connector)
 	connector.close()
+
+	rename = {'cx_logd':'acd_logd', 'cx_logp':'acd_logp', 'cx_most_bpka':'acd_most_bpka', 'cx_most_apka':'acd_most_apka'}
+	df.rename(columns=rename, inplace=True)
 
 	tdb_con = sqlite3.connect(targetDB)
 	df.to_sql('ligands', con=tdb_con, if_exists='append', index=False)
