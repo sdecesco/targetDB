@@ -816,10 +816,10 @@ def pdb_blast(sequence, path, gene_id, gene='', pdb_list=None):
 	e_value_treshold = 0.0001
 	query_length = float(blast_record.query_length)
 	for alignment in blast_record.alignments:
-		pdb_code = alignment.title.split('|')[3]
+		pdb_code = alignment.hit_def.split(' ')[0].split('_')[0]
 		if pdb_code in pdb_list:
 			continue
-		chain_id = alignment.accession
+		chain_id = alignment.hit_def.split(' ')[0]
 		for hsp in alignment.hsps:
 			length = float(hsp.align_length)
 			percent_seq = round((length / query_length) * 100, 1)
