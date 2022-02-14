@@ -1038,46 +1038,6 @@ def pubmed_search(gene_name, email, return_number=False, mesh_term=None):
 	df['Chemistry'] = chem
 	return df
 
-
-# @ret.retryer(max_retries=10, timeout=10)
-# def open_target_association(ensembl_id):
-# 	ot = OpenTargetsClient()
-# 	if ensembl_id == '':
-# 		return pd.DataFrame(columns=['affected_pathway','animal_model','genetic_association', 'known_drug', 'litterature_mining', 'rna_expression', 'somatic_mutation', 'overall_score','disease_name','disease_area','gene_symbol'])
-# 	associations = ot.get_associations_for_target(ensembl_id)
-#
-# 	df = associations.to_dataframe()
-#
-# 	if df.empty:
-# 		return pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'litterature_mining',
-# 				         'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
-# 				         'gene_symbol'])
-#
-# 	df = df[(df['is_direct'] == True)]
-# 	cols = ['target.gene_info.symbol', 'disease.efo_info.therapeutic_area.labels', 'disease.efo_info.label',
-# 	        'association_score.overall',
-# 	        'association_score.datatypes.genetic_association',
-# 	        'association_score.datatypes.known_drug',
-# 	        'association_score.datatypes.literature',
-# 	        'association_score.datatypes.animal_model',
-# 	        'association_score.datatypes.affected_pathway',
-# 	        'association_score.datatypes.rna_expression',
-# 	        'association_score.datatypes.somatic_mutation']
-# 	rename = {'association_score.datatypes.affected_pathway': 'affected_pathway',
-# 	          'association_score.datatypes.animal_model': 'animal_model',
-# 	          'association_score.datatypes.genetic_association': 'genetic_association',
-# 	          'association_score.datatypes.known_drug': 'known_drug',
-# 	          'association_score.datatypes.literature': 'litterature_mining',
-# 	          'association_score.datatypes.rna_expression': 'rna_expression',
-# 	          'association_score.datatypes.somatic_mutation': 'somatic_mutation',
-# 	          'association_score.overall': 'overall_score', 'disease.efo_info.label': 'disease_name',
-# 	          'disease.efo_info.therapeutic_area.labels': 'disease_area', 'target.gene_info.symbol': 'gene_symbol'}
-# 	df = df[cols]
-# 	df = df.round(2)
-# 	df = df[df['association_score.overall'] > 0.05]
-# 	df.rename(columns=rename, inplace=True)
-# 	return df
-
 @ret.retryer(max_retries=10, timeout=10)
 def open_target_association(ensembl_id):
 	if ensembl_id == '':
