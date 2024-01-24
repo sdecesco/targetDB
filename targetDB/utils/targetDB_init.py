@@ -812,9 +812,8 @@ def create_db():
 	print('[DATABASE]: targetDB empty database created')
 	print('[FILE CREATED]: ',db_file_path)
 
-	pck_path = Path(str(pkg_resources.resource_filename('targetDB.utils', ''))).parent
+	pck_path = Path(str(pkg_resources.resource_filename('utils', ''))).parent
 	data_pck_path = pck_path.joinpath('data')
-
 	fill_db(data_pck_path,connector)
 	print('[DATABASE]: targetDB table pre-filling completed')
 
@@ -824,7 +823,8 @@ def create_db():
 
 def fill_db(path_to_datafiles,connector):
 	for f in path_to_datafiles.iterdir():
-		df = pd.read_json(str(f))
-		table_name = '_'.join(f.name.split('_')[:-3])
-		print('[DATABASE]: Filling the table ',table_name)
-		df.to_sql(table_name, con=connector, if_exists='append', index=False)
+		if not Path(str(f)).is_dir():
+			df = pd.read_json(str(f))
+			table_name = '_'.join(f.name.split('_')[:-3])
+			print('[DATABASE]: Filling the table ',table_name)
+			df.to_sql(table_name, con=connector, if_exists='append', index=False)

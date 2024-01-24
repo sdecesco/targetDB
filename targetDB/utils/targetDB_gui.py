@@ -19,10 +19,11 @@ import configparser
 from pathlib import Path
 import pandas as pd
 
-from targetDB import druggability_report as dr
-from targetDB import target_descriptors as td
-from targetDB.utils import gene2id as g2id
-from targetDB.utils import druggability_ml as dml
+import druggability_report as dr
+import target_descriptors as td
+from utils import gene2id as g2id
+from utils import druggability_ml as dml
+
 from tkinter.filedialog import asksaveasfilename
 from tkinter import Button
 

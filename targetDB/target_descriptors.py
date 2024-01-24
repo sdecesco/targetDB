@@ -13,7 +13,8 @@ if platform == 'darwin':
 # end fix for macOS
 import matplotlib.pyplot as plt
 from operator import itemgetter
-from targetDB.utils import targetDB_gui as tgui
+
+from utils import targetDB_gui as tgui
 
 
 def norm_min_max(df, df_min=0.0, df_max=1.0):
@@ -725,7 +726,7 @@ def get_descriptors_list(target_id, targetdb=None):
     # ================================================================================================================#
 
     if not results['pockets'].empty:
-        data = data.merge(results['pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index().round(2),
+        data = data.merge(results['pockets'].groupby('Target_id').mean(numeric_only = True).add_prefix('mean_').reset_index().round(2),
                           on='Target_id',
                           how='left')
         data = data.merge(results['pockets'].groupby('Target_id')['druggability_score'].std().reset_index().rename(
@@ -742,7 +743,7 @@ def get_descriptors_list(target_id, targetdb=None):
         data = data.merge(pocket, on="Target_id", how='left')
 
     if not results['alt_pockets'].empty:
-        data = data.merge(results['alt_pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index().round(2),
+        data = data.merge(results['alt_pockets'].groupby('Target_id').mean(numeric_only = True).add_prefix('mean_').reset_index().round(2),
                           on='Target_id',
                           how='left')
         data = data.merge(
@@ -796,7 +797,7 @@ def get_descriptors_list(target_id, targetdb=None):
     if not results['tissue_expression'].empty:
         cell_values = results['tissue_expression'].groupby(['Target_id', 'organ', 'tissue']).max()
         cell_values.value = cell_values.value.replace(0, np.nan)
-        tissue_grouped = cell_values.groupby(['Target_id', 'organ']).mean().round(1).reset_index().fillna(0)
+        tissue_grouped = cell_values.groupby(['Target_id', 'organ']).mean(numeric_only = True).round(1).reset_index().fillna(0)
         tissue = tissue_grouped.pivot(index='Target_id', columns='organ', values='value').reset_index()
         tissue_avg = tissue_grouped.groupby('Target_id')['value'].agg(['mean', 'std']).rename(
             columns={'mean': 'EXP_LVL_AVG', 'std': 'EXP_LVL_STDDEV'}).reset_index()

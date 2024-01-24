@@ -6,7 +6,7 @@ from urllib.error import *
 import xmltodict
 import numpy as np
 from operator import itemgetter
-import targetDB.utils.retryers as ret
+import utils.retryers as ret
 
 # GENERAL DICTIONARIES
 

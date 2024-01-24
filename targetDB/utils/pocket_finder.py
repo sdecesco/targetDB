@@ -4,7 +4,9 @@ import subprocess
 
 import pandas as pd
 from operator import itemgetter
-from targetDB.utils import pdb_parser as parser
+
+from utils import pdb_parser as parser
+
 from Bio.PDB import *
 from pathlib import Path
 
