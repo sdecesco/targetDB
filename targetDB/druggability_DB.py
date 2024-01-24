@@ -552,7 +552,6 @@ def get_ligands_to_do(chembl_code):
 	if verbose:
 		print("[LIGANDS]: Extracting ligand informations")
 	# =====================# GETTING THE LIST OF LIGAND ASSOCIATED TO  THE TARGET #==========================#
-	print("[LIGANDS]: Getting list of ligands associated to target")
 	connector = sqlite3.connect(chembl_24)
 	query_lig_target = "SELECT TD.chembl_id AS target_id,MOL.chembl_id AS lig_id,version.name as " \
 	                   "chembl_version FROM target_dictionary TD,activities BIO,assays AC," \
@@ -566,7 +565,6 @@ def get_ligands_to_do(chembl_code):
 	if res_lig_target.empty:
 		return lig_to_do
 	
-	print("[LIGANDS]: Going throug ligands associated to target and geting bioactivity information")
 
 	count = 0
 	limit = 500
@@ -598,7 +596,6 @@ def get_ligands_to_do(chembl_code):
 	connector2.close()
 
 	# =========# ADDING IN THE TO-DO LIST ONLY LIGAND WITH NO BIOACTIVITY IN THE DB #========================#
-	print("[LIGANDS]: Adding in the to do list only ligands with no bioactivity in the DB")
 	for i in res_lig_target.index:
 		if res_lig_target.loc[i]['lig_id'] in res_lig_in_db.index:
 			rhs=str(res_lig_in_db.loc[res_lig_target.loc[i]['lig_id']].chembl_version)
@@ -699,11 +696,9 @@ def get_ligands_info():
 	connector.close()
 	rename = {'cx_logd':'acd_logd', 'cx_logp':'acd_logp', 'cx_most_bpka':'acd_most_bpka', 'cx_most_apka':'acd_most_apka'}
 	df.rename(columns=rename, inplace=True)
-	print("[LIGANDS]: Ligand information extracted and formatted")
 
 	tdb_con = sqlite3.connect(targetDB)
 	df.to_sql('ligands', con=tdb_con, if_exists='append', index=False)
-	print("[LIGANDS]: Ligand information added to building database")
 	tdb_con.close()
 
 
@@ -1428,40 +1423,25 @@ class Target:
 				break
 
 			# ===========# GET ALL THE CROSSREFERENCES (source: Uniprot)#==============#
-			print("[INFO]: Getting all the crossreferences")
 			self.pdb, self.go, self.chembl_id = get_crossref_pdb_go_chembl(self.record)
-			print("[INFO]: Crossreferencing complete")
 			# ===========# GET PROTEIN EXPRESSION LEVELS (source: ProteinAtlas)#==============#
-			print("[INFO]: Getting protein expression levels from ProteinAtlas")
 			self.protein_expression = patlas.ProteinExpression(self.gene, id=self.ensembl_id)
 			if self.protein_expression.protein_lvl is None:
 				self.protein_expression = None
-			print("[INFO]: Protein expression level retrieval complete")
 			# ===========# GET INFO FROM HUMANMINE.ORG (disease, phenotypes, differential_exp_diseases,
 			# differential_exp_tissues, gwas,pathways) #=============#
-			print("[INFO]: Getting info from Humanmine")
 			self.disease, self.phenotypes, self.differential_exp_disease, self.differential_exp_tissues, self.gwas, self.pathways = get_humanmine_data(
 				self.gene)
-			print("[INFO]: Humanmine info retrieval complete")
 			# ==========# GET DOMAIN INFORMATION FROM BOTH CHEMBL AND UNIPROT #===========#
-			print("[INFO]: Getting domain information from CHEMBL and UNIPROT")
 			self.domain = get_domains(record=self.record,gene_id=self.swissprotID, chembl_id=self.chembl_id)
-			print("[INFO: Domain information retrieval complete]")
 			# ==========# GET DISEASE ASSOCIATION (Source: OpenTargets)#===========#
-			print("[INFO]: Getting Disease Association from OpenTargets")
 			self.open_targets = open_target_association(self.ensembl_id)
-			print("[INFO]: Disease Association complete")
 			# ==========# GET SEQUENCE INFORMATION (Source: Uniprot)#===========#
-			print("[INFO]: Getting Sequence Information from Uniprot")
 			self.sequence = self.record.sequence
 			self.seq_list = list(self.sequence)
-			print("[INFO]: Sequence retreival complete")
 			# ==========# GET ISOFORMS INFORMATION (Source: Uniprot) #===========#
-			print("[INFO]: Getting Isoform information from Uniprot")
 			self.isoforms, self.modifications = get_variants(self.record, self.domain)
-			print("[INFO]: Isoform information retrieval complete")
 			# ==========# GET PROTEIN CLASS AND SYNONYMS FROM CHEMBL #===========#
-			print("[INFO]: Getting protein class and synonyms from CHEMBL")
 			self.prot_info = get_chembl_info(self.chembl_id)
 			if self.prot_info.empty:
 				self.prot_info.loc[0] = [None, None, None, synonyms(self.record)]
@@ -1479,7 +1459,6 @@ class Target:
 			self.prot_info['Function'] = self.go.loc['F'].value
 			self.prot_info['Number_isoforms'] = len(self.isoforms)
 			self.prot_info['chembl_id'] = self.chembl_id
-			print("[INFO]: Protein class and synonym retrieval complete")
 			# ============================================================================#
 			# ======================# END OF THE INFO SECTION #===========================#
 			# ============================================================================#
@@ -1487,9 +1466,7 @@ class Target:
 			# ============================================================================#
 			# ======================# START OF THE PDB SECTION #==========================#
 			# ============================================================================#
-			print("[INFO]: Commencing PDB section")
 			# ======# RETRIEVING LIST OF PDB ASSOCIATED TO TARGET ALREADY IN DB #=========#
-			print("[INFO]: Retrieving list of PDB associated to target already in DB")
 			connector = sqlite3.connect(targetDB)
 			query_pdb = "SELECT PDB_code FROM PDB_Chains WHERE Target_id ='%s' GROUP BY PDB_code" % self.swissprotID
 			query_pockets = "SELECT Pocket_id FROM fPockets WHERE Target_id ='%s' AND druggable='TRUE' AND blast='FALSE'" % self.swissprotID
@@ -1498,26 +1475,21 @@ class Target:
 			connector.close()
 
 			# =============# REMOVING PDB CODE FROM CrossRef if already done #============#
-			print("[INFO]: Removing PDB code from Crossref if already done")
 			self.pdb.drop(res_pdb.PDB_code, inplace=True)
 
 			if not self.pdb.empty:
 				# ========================# DOWNLOADING THE PDBs #============================#
-				print("[INFO]: Downloading PDBS")
 				get_pdb(self.pdb, self.path)
 
 				# ========================# GET PDB SEQUENCE INFO #===========================#
-				print("[INFO]: Geting PDB sequence info")
 				self.pdb_info = get_pdb_seq_info(self.pdb, self.domain)
 
 				# =====================# GET POCKETS (source: fpockets) ======================#
-				print("[INFO]: Getting pockets from fpockets")
 				self.pockets = pocket.get_pockets(self.path, sphere_size=3, pdb_info=self.pdb, domain=self.domain,
 				                                  uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 				self.druggable_pockets = self.pockets['pockets'][self.pockets['pockets'].druggable == 'TRUE'].copy()
 
 			pdb_super_list = list(res_pdb.PDB_code) + list(self.pdb.index)
-			print("[INFO]: PDB section complete")
 			# ============================================================================#
 			# ======================# END OF THE PDB SECTION #============================#
 			# ============================================================================#
@@ -1525,9 +1497,7 @@ class Target:
 			# ============================================================================#
 			# ====================# START OF THE LIGAND SECTION #=========================#
 			# ============================================================================#
-			print("[INFO]: Commencing ligand section")
 			# ==============# FILL THE ASSAY TABLE IF EMPTY #================#
-			print("[INFO]: Filling assay table")
 			connector = sqlite3.connect(targetDB)
 			if pd.read_sql("SELECT assay_id FROM assays", con=connector).empty:
 				if verbose:
@@ -1545,7 +1515,6 @@ class Target:
 
 			if self.chembl_id:
 				# ==============# GET LIST OF LIGAND TO ADD #================#
-				print("[INFO]: Getting list of ligands to add")
 				ligands_to_do = get_ligands_to_do(self.chembl_id)
 
 				if len(ligands_to_do) != 0:
@@ -1556,11 +1525,9 @@ class Target:
 			# ============================================================================#
 			# =====================# END OF THE LIGAND SECTION #==========================#
 			# ============================================================================#
-			print("[INFO]: Ligand section complete")
 			# ============================================================================#
 			# ====================# START OF THE BLAST SECTION #==========================#
 			# ============================================================================#
-			print("[INFO]: Commencing BLAST section")
 			self.alternate_pdb = pdb_blast(self.sequence, self.path, self.swissprotID, pdb_list=pdb_super_list,
 			                               gene=self.gene)
 			very_close_pdb = self.alternate_pdb[self.alternate_pdb.similarity >= 90.0].copy()
@@ -1576,13 +1543,11 @@ class Target:
 					                                            uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 
 			self.neighbours = proteins_blast(self.sequence, self.swissprotID, self.gene, self.path)
-			print("[INFO]: Blast section complete")
 			# ============================================================================#
 			# ====================# END OF THE BLAST SECTION #============================#
 			# ============================================================================#
 
 			# ======================# WRITING TO THE DATABASE #===========================#
-			print("[INFO]: Writing information to database")
 			write_to_db(self, targetDB)
 			break
 		# ============================================================================#
