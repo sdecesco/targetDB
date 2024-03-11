@@ -1683,7 +1683,7 @@ def main():
 			gene_df,missing = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
 		elif args.do_all:
-			gene_df,missing = g2id.gene_to_id_all(targetDB_path=targetDB)
+			gene_df = g2id.gene_to_id_all(targetDB_path=targetDB)
 			break
 
 	for g_id in gene_df.index:
