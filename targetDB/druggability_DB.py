@@ -8,6 +8,7 @@ import time
 import sqlite3
 import urllib.request as urllib
 import requests
+import re
 import json
 from urllib.error import *
 
@@ -261,6 +262,12 @@ def get_domains(record=None, gene_id=None, chembl_id=None):
 				start = str(start)[1:]
 			while not str(finish)[0].isdigit():
 				finish = str(finish)[1:]
+			if start == finish:
+				regex = r'(\d+|\D+)'
+				l = re.split(regex, start)
+				l = [x for x in l if x.isdigit()]
+				start = l[0]
+				finish = l[1]
 			domain_name = str(feature[3]).split('(')[0].rstrip()
 			domain_id = str(gid) + str(start) + str(finish) + '_uniprot'
 			domain.append(
@@ -816,11 +823,9 @@ def pdb_blast(sequence, path, gene_id, gene='', pdb_list=None):
 	e_value_treshold = 0.0001
 	query_length = float(blast_record.query_length)
 	for alignment in blast_record.alignments:
-		#pdb_code = alignment.hit_def.split(' ')[0].split('_')[0]
 		pdb_code = alignment.hit_id.split('|')[1]
 		if pdb_code in pdb_list:
 			continue
-		#chain_id = alignment.hit_def.split(' ')[0]
 		chain_id = alignment.accession
 		for hsp in alignment.hsps:
 			length = float(hsp.align_length)
@@ -923,9 +928,8 @@ def proteins_blast(sequence, gene_id, gene, path):
 		for hsp in alignment.hsps:
 			length = float(hsp.align_length)
 			neighbour_accession_code = alignment.accession
-			#neighbour_gene_name = alignment.title.split('|')[-1].split('_')[0]
-			neighbour_gene_name = alignment.hit_def.split(':')[1].split("=")[1].split(';')[0]
-			#neighbour_gene_species = alignment.title.split('|')[-1].split('_')[1].split(' ')[0]
+			idx_name = [idx for idx, s in enumerate(alignment.hit_def.split(':')) if 'Full' in s][0]
+			neighbour_gene_name = alignment.hit_def.split(':')[idx_name].split("=")[1].split(';')[0]
 			neighbour_gene_species = alignment.hit_def.split('[')[1].split(']')[0]
 			if neighbour_accession_code in list_of_accession_ID:
 				continue
@@ -1086,7 +1090,7 @@ def open_target_association(ensembl_id):
 
 	try:
 		# Perform POST request and check status code of response
-		r = requests.post(base_url, json={"query": query_string, "variables":{}})
+		r = requests.post(base_url, json={"query": query_string, "variables":{}}, timeout = 20)
 		if r.status_code!=200:
 			print("[OPENTARGETS]: Couldn't get results from Open Targets API")
 			pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
@@ -1101,9 +1105,13 @@ def open_target_association(ensembl_id):
 							  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
 							  'gene_symbol'])
 
+	if api_response_as_json['data']['target'] is None:
+		data = pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'litterature_mining',
+							   'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+							  'gene_symbol'])
+		return(data)
 	# Extract the assodiated diseases info for this target
 	ad=pd.DataFrame.from_dict(api_response_as_json['data']['target']['associatedDiseases'])
-
 	# Extract the approved gene symbol for this target
 	gene_symbol=pd.DataFrame.from_dict(api_response_as_json['data']['target'])['approvedSymbol'][1]
 
@@ -1139,6 +1147,11 @@ def open_target_association(ensembl_id):
 			data = pd.DataFrame(data, index=[0])
 		df = pd.concat([df, data], ignore_index = True)
 
+	if df.empty:
+		data = pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'litterature_mining',
+							   'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+							  'gene_symbol'])
+		return(data)
 	df = df.round(2)
 	df = df[df['overall_score'] > 0.05]
 	rename = {'literature': 'litterature_mining'}
@@ -1671,7 +1684,7 @@ def main():
 			gene_df,missing = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
 		elif args.do_all:
-			gene_df,missing = g2id.gene_to_id_all(targetDB_path=targetDB)
+			gene_df = g2id.gene_to_id_all(targetDB_path=targetDB)
 			break
 
 	for g_id in gene_df.index:

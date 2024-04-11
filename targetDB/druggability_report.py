@@ -255,7 +255,6 @@ def get_single_excel(target):
                         row, col = header_index[k]
                         col = col + 1
                         wb_general_info.write(row, col, v, left_v_center)
-
                 target_desc = td.get_descriptors_list(uniprot_id, targetdb=targetDB)
                 tscore = td.target_scores(target_desc, mode='single')
                 druggability_pred = dml.predict(ml_model, tscore.score_components)
@@ -760,7 +759,7 @@ def get_single_excel(target):
                            'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class', 'class_def',
                            'max_phase',
                            'oral']
-                mask = bdb.loc[:, ['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']].applymap(
+                mask = bdb.loc[:, ['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']].map(
                     np.isreal)
                 bdb[~mask] = np.nan
                 bdb = bdb[((bdb[['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']] <= 10000) & (
@@ -809,7 +808,6 @@ def get_single_excel(target):
 
 def get_list_excel(list_targets,not_found=[]):
     not_in_db = {'Not present in DB': not_found}
-
     if list_targets.empty:
         return print("No genes that you entered are in the Database")
 
@@ -831,7 +829,6 @@ def get_list_excel(list_targets,not_found=[]):
 
     gene_ids = "','".join(list_targets.uniprot_ids.astype(str))
     gene_ids = gene_ids.replace('[\'', '').replace('\']', '')
-
     data = td.get_descriptors_list(gene_ids, targetdb=targetDB)
     tscore = td.target_scores(data)
     druggability_pred = dml.predict(ml_model, tscore.score_components)
@@ -874,10 +871,10 @@ def get_list_excel(list_targets,not_found=[]):
                  'information_score', 'safety_score',
                  "EBI Total Patent Count", "JensenLab PubMed Score", "NCBI Gene PubMed Count", "PubTator Score",
                  "total_patent_count", "year_max_patents", "count_patents_max_year", "novelty_score",
-                 "total # publications", "number of Dementia publications", 'Brain', 'Adipose & soft tissue',
+                 "total # publications", "number of Dementia publications", 'Brain', 'Connective & soft tissue',
                  'Bone marrow & lymphoid tissues', 'Endocrine tissues',
                  'Female tissues', 'Gastrointestinal tract', 'Kidney & urinary bladder',
-                 'Liver & gallbladder', 'Lung', 'Male tissues', 'Muscle tissues',
+                 'Liver & gallbladder', 'Respiratory system', 'Male tissues', 'Muscle tissues',
                  'Pancreas', 'Proximal digestive tract', 'Skin', "Expression_Selectivity", "tissue_max_expression",
                  "expression_max_tissue", 'EXP_LVL_AVG', 'EXP_LVL_STDDEV', 'Heart_alert', 'Heart_value', 'Liver_alert',
                  'Liver_value', 'Kidney_alert', 'Kidney_value',
@@ -907,7 +904,6 @@ def get_list_excel(list_targets,not_found=[]):
                  "ChEMBL_bioactives_potent_count", "ChEMBL_bioactives_moderate_selectivity_count",
                  "ChEMBL_bioactives_good_selectivity_count", "ChEMBL_bioactives_great_selectivity_count",
                  "commercial_total", "commercial_potent_total"]
-
     data = data[col_order]
     data.rename(columns=weights_dict, inplace=True)
     data.sort_values("mpo_score", axis=0, ascending=False, inplace=True, na_position='last')
