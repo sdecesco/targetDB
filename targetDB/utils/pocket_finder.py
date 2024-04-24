@@ -4,7 +4,9 @@ import subprocess
 
 import pandas as pd
 from operator import itemgetter
-from targetDB.utils import pdb_parser as parser
+
+from utils import pdb_parser as parser
+
 from Bio.PDB import *
 from pathlib import Path
 
@@ -15,7 +17,11 @@ io = PDBIO()
 def fpocket_launcher(pdb, pdb_file, sphere_size_min=3.0,verbose=False):
 	if verbose:
 		print('[POCKET SEARCH]: ' + str(pdb_file))
-	subprocess.check_output([fpocket_path, '-f', str(pdb)])
+	try:
+		subprocess.check_output([fpocket_path, '-f', str(pdb)])
+	except Exception as e:
+		return
+
 
 
 def parse_pockets(out_file):
@@ -92,7 +98,6 @@ def get_pockets(path, sphere_size=3.0, pdb_info=pd.DataFrame(), domain=pd.DataFr
 
 		pdb_file = Path(f).name
 		pdb_code = str(pdb_file).rstrip('.pdb')
-
 		pocket_path = path.joinpath('POCKETS')
 		if not pocket_path.is_dir():
 			pocket_path.mkdir(parents=True, exist_ok=True)

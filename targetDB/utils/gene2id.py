@@ -19,7 +19,7 @@ def gene_to_id(list_of_genes,targetDB_path=None):
 	gene_xref = pd.read_sql(gene_id_query, con=connector)
 	xref_df = gene_xref[gene_xref.xref_name.isin(['symbol', 'uniprot_ids', 'ensembl_gene_id', 'prev_symbol', 'alias_symbol'])]
 	xref_piv = xref_df.pivot_table(index='hgnc_id', values='xref_value', columns='xref_name',
-	                               aggfunc=lambda x: ';'.join(x), fill_value='')
+	                               aggfunc=lambda x: ';'.join(item for item in x if item), fill_value='')
 	for col in required_columns:
 		if col not in xref_piv.columns:
 			xref_piv[col] = ''
@@ -51,7 +51,7 @@ def gene_to_id_all(targetDB_path=None):
 	gene_xref = pd.read_sql(gene_id_query, con=connector)
 	xref_df = gene_xref[gene_xref.xref_name.isin(required_columns)]
 	xref_piv = xref_df.pivot_table(index='hgnc_id', values='xref_value', columns='xref_name',
-	                               aggfunc=lambda x: ';'.join(x), fill_value='')
+	                               aggfunc=lambda x: ';'.join(item for item in x if item), fill_value='')
 	xref_piv = xref_piv.replace('', np.nan)
 	xref_piv = xref_piv.dropna(subset=['uniprot_ids'])
 	xref_piv = xref_piv.replace(np.nan,'')

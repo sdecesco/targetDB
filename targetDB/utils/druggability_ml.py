@@ -13,7 +13,7 @@ def generate_model():
 
     # recover the training data from the data file
 
-    pck_path = Path(str(pkg_resources.resource_filename('targetDB.utils', ''))).parent
+    pck_path = Path(str(pkg_resources.resource_filename('utils', ''))).parent
     ml_data = pck_path.joinpath('ml_data')
     ml_data = ml_data.joinpath('ml_training_data_13_01_2020.zip')
 
@@ -55,7 +55,7 @@ def predict_prob(model, data):
 
 def in_training_set(data):
 
-    pck_path = Path(str(pkg_resources.resource_filename('targetDB.utils', ''))).parent
+    pck_path = Path(str(pkg_resources.resource_filename('utils', ''))).parent
     ml_data = pck_path.joinpath('ml_data')
     ml_data = ml_data.joinpath('ml_training_data_13_01_2020.zip')
 

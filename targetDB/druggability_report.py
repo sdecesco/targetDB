@@ -13,14 +13,14 @@ import pandas as pd
 import numpy as np
 from Bio import Entrez, Medline
 
-from targetDB import cns_mpo as mpo
-from targetDB import target_descriptors as td
-from targetDB import target_features as tf
-from targetDB.utils import config as cf
-from targetDB.utils import retryers as ret
-from targetDB.utils import gene2id as g2id
-from targetDB.utils import druggability_ml as dml
-from targetDB.utils import targetDB_gui as tgui
+import cns_mpo as mpo
+import target_descriptors as td
+import target_features as tf
+from utils import config as cf
+from utils import retryers as ret
+from utils import gene2id as g2id
+from utils import druggability_ml as dml
+from utils import targetDB_gui as tgui
 
 ml_model = dml.generate_model()
 
@@ -158,7 +158,7 @@ def get_single_excel(target):
     for uniprot_id in target.uniprot_ids:
         if uniprot_id in list_of_entries.index:
             output_name = Path(output_single_path).joinpath(target.symbol + '_' + uniprot_id + '.xlsx')
-            writer = pd.ExcelWriter(str(output_name), engine='xlsxwriter', options={'nan_inf_to_errors': True})
+            writer = pd.ExcelWriter(str(output_name), engine='xlsxwriter', engine_kwargs= {'options' : {'nan_inf_to_errors': True}})
 
             workbook = writer.book
 
@@ -255,7 +255,6 @@ def get_single_excel(target):
                         row, col = header_index[k]
                         col = col + 1
                         wb_general_info.write(row, col, v, left_v_center)
-
                 target_desc = td.get_descriptors_list(uniprot_id, targetdb=targetDB)
                 tscore = td.target_scores(target_desc, mode='single')
                 druggability_pred = dml.predict(ml_model, tscore.score_components)
@@ -443,26 +442,26 @@ def get_single_excel(target):
                             tmp_row_with_phen.append(row_data)
                             row_data = row + 4
                             if lethal and normal:
-                                wb_genotypes.write(row + 3, col_gen, genotype, col_header_orangebg)
+                                wb_genotypes.write(row + 3, col_gen, genotype[0], col_header_orangebg)
                             elif lethal:
-                                wb_genotypes.write(row + 3, col_gen, genotype, col_header_redbg)
+                                wb_genotypes.write(row + 3, col_gen, genotype[0], col_header_redbg)
                             elif normal:
-                                wb_genotypes.write(row + 3, col_gen, genotype, col_header_greenbg)
+                                wb_genotypes.write(row + 3, col_gen, genotype[0], col_header_greenbg)
                             else:
-                                wb_genotypes.write(row + 3, col_gen, genotype, col_header)
+                                wb_genotypes.write(row + 3, col_gen, genotype[0], col_header)
 
                             col_gen += 1
                         if col_gen - col_zyg == 1:
-                            wb_genotypes.write(row + 2, col_zyg, zygosity, col_header)
+                            wb_genotypes.write(row + 2, col_zyg, zygosity[0], col_header)
                         else:
-                            wb_genotypes.merge_range(row + 2, col_zyg, row + 2, col_gen - 1, zygosity, col_header)
+                            wb_genotypes.merge_range(row + 2, col_zyg, row + 2, col_gen - 1, zygosity[0], col_header)
                         col_zyg = col_gen
                     if col_zyg - col_allele == 1:
                         wb_genotypes.write(row + 1, col_allele, allele_type, col_header)
-                        wb_genotypes.write(row, col_allele, allele, col_header)
+                        wb_genotypes.write(row, col_allele, allele[0], col_header)
                     else:
                         wb_genotypes.merge_range(row + 1, col_allele, row + 1, col_zyg - 1, allele_type, col_header)
-                        wb_genotypes.merge_range(row, col_allele, row, col_zyg - 1, allele, col_header)
+                        wb_genotypes.merge_range(row, col_allele, row, col_zyg - 1, allele[0], col_header)
                     col_allele = 0
                     col_zyg = 0
                     col_gen = 0
@@ -760,7 +759,7 @@ def get_single_excel(target):
                            'rotB', 'CNS_MPO', 'mol_name', 'molecular_species', 'indication_class', 'class_def',
                            'max_phase',
                            'oral']
-                mask = bdb.loc[:, ['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']].applymap(
+                mask = bdb.loc[:, ['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']].map(
                     np.isreal)
                 bdb[~mask] = np.nan
                 bdb = bdb[((bdb[['IC50(nM)', 'EC50(nM)', 'Kd(nM)', 'Ki(nM)', 'kon(M-1s-1)', 'koff(s-1)']] <= 10000) & (
@@ -804,13 +803,11 @@ def get_single_excel(target):
         else:
             return print("Gene named ", target.symbol, " with ID [", uniprot_id,
                          '] not present in the database. Run the target_DB command to run the analysis on it')
-
     return message
 
 
 def get_list_excel(list_targets,not_found=[]):
     not_in_db = {'Not present in DB': not_found}
-
     if list_targets.empty:
         return print("No genes that you entered are in the Database")
 
@@ -832,7 +829,6 @@ def get_list_excel(list_targets,not_found=[]):
 
     gene_ids = "','".join(list_targets.uniprot_ids.astype(str))
     gene_ids = gene_ids.replace('[\'', '').replace('\']', '')
-
     data = td.get_descriptors_list(gene_ids, targetdb=targetDB)
     tscore = td.target_scores(data)
     druggability_pred = dml.predict(ml_model, tscore.score_components)
@@ -875,10 +871,10 @@ def get_list_excel(list_targets,not_found=[]):
                  'information_score', 'safety_score',
                  "EBI Total Patent Count", "JensenLab PubMed Score", "NCBI Gene PubMed Count", "PubTator Score",
                  "total_patent_count", "year_max_patents", "count_patents_max_year", "novelty_score",
-                 "total # publications", "number of Dementia publications", 'Brain', 'Adipose & soft tissue',
+                 "total # publications", "number of Dementia publications", 'Brain', 'Connective & soft tissue',
                  'Bone marrow & lymphoid tissues', 'Endocrine tissues',
                  'Female tissues', 'Gastrointestinal tract', 'Kidney & urinary bladder',
-                 'Liver & gallbladder', 'Lung', 'Male tissues', 'Muscle tissues',
+                 'Liver & gallbladder', 'Respiratory system', 'Male tissues', 'Muscle tissues',
                  'Pancreas', 'Proximal digestive tract', 'Skin', "Expression_Selectivity", "tissue_max_expression",
                  "expression_max_tissue", 'EXP_LVL_AVG', 'EXP_LVL_STDDEV', 'Heart_alert', 'Heart_value', 'Liver_alert',
                  'Liver_value', 'Kidney_alert', 'Kidney_value',
@@ -908,7 +904,6 @@ def get_list_excel(list_targets,not_found=[]):
                  "ChEMBL_bioactives_potent_count", "ChEMBL_bioactives_moderate_selectivity_count",
                  "ChEMBL_bioactives_good_selectivity_count", "ChEMBL_bioactives_great_selectivity_count",
                  "commercial_total", "commercial_potent_total"]
-
     data = data[col_order]
     data.rename(columns=weights_dict, inplace=True)
     data.sort_values("mpo_score", axis=0, ascending=False, inplace=True, na_position='last')
@@ -955,7 +950,7 @@ def get_list_excel(list_targets,not_found=[]):
                 break
         writer.sheets['Druggability_list'].write(1, col_num, value, vert_col_header)
 
-    pck_path = Path(str(pkg_resources.resource_filename('targetDB.utils', ''))).parent
+    pck_path = Path(str(pkg_resources.resource_filename('utils', ''))).parent
     col_desc = pck_path.joinpath('resources')
     col_desc = col_desc.joinpath('TargetDB_list_output_columns_definition.xlsx')
 
@@ -963,7 +958,7 @@ def get_list_excel(list_targets,not_found=[]):
     df_col_desc.to_excel(writer,'Columns description',index=False)
 
     not_in_db.to_excel(writer, 'Not in DB', index=False)
-    writer.save()
+    writer.close()
     print("[EXPORT]: Excel file: ", '[Export_' + str(len(data)) + '_entries_' + t + '.xlsx]', ' successfully generated')
     tgui.info_message('Excel file: ' + '[Export_' + str(len(data)) + '_entries_' + t + '.xlsx] successfully generated')
     return "Success"

@@ -18,7 +18,7 @@ Functions:
 
 from __future__ import print_function
 
-from Bio._py3k import _as_string
+#from Bio._py3k import _as_string
 
 
 class Record(object):
@@ -170,7 +170,8 @@ def _read(handle):
 	for line in handle:
 		# This is for Python 3 to cope with a binary handle (byte strings),
 		# or a text handle (unicode strings):
-		line = _as_string(line)
+		#line = _as_string(line)
+		line = str(line)
 		key, value = line[:2], line[5:].rstrip()
 		if unread:
 			value = unread + " " + value

@@ -21,7 +21,7 @@
 # (C) Dr. De Cesco Stephane - v3.2 - 22/03/2017							#
 # ----------------------------------------------------------------------#
 # -------------------------- MODULES IMPORT ----------------------------#
-
+import pandas as pd
 def monotonic_score(value, lower, upper):
     # =======================================================================================
     #         lower
@@ -36,6 +36,7 @@ def monotonic_score(value, lower, upper):
     # Score ={ f(upper and lower) if upper < value < lower
     # 		 | 0 if value > upper
     # =======================================================================================
+    value = value.astype(float)
     upper = float(upper)
     lower = float(lower)
     v = value.copy()

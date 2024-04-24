@@ -13,7 +13,8 @@ if platform == 'darwin':
 # end fix for macOS
 import matplotlib.pyplot as plt
 from operator import itemgetter
-from targetDB.utils import targetDB_gui as tgui
+
+from utils import targetDB_gui as tgui
 
 
 def norm_min_max(df, df_min=0.0, df_max=1.0):
@@ -139,19 +140,19 @@ class target_scores:
                           "ChEMBL_bioactives_good_selectivity_count", "ChEMBL_bioactives_great_selectivity_count",
                           "commercial_potent_total"]
         chemistry_df = self.data[chemistry_cols].copy()
-        chemistry_df['bindingDB_potent'] = norm_min_max(np.log(chemistry_df.BindingDB_potent_count), df_max=8)
-        chemistry_df['bindingDB_potent_log'] = norm_min_median(np.log(chemistry_df.BindingDB_potent_count), median=3.13)
-        chemistry_df['bindingDB_phase2'] = norm_min_max(np.log(chemistry_df.BindingDB_potent_phase2_count), df_max=4.7)
-        chemistry_df['chembl_potent'] = norm_min_max(np.log(chemistry_df.ChEMBL_bioactives_potent_count), df_max=8)
-        chemistry_df['chembl_potent_log'] = norm_min_median(np.log(chemistry_df.ChEMBL_bioactives_potent_count),
+        chemistry_df['bindingDB_potent'] = norm_min_max(np.log(pd.to_numeric(chemistry_df.BindingDB_potent_count, errors='coerce')), df_max=8)
+        chemistry_df['bindingDB_potent_log'] = norm_min_median(np.log(pd.to_numeric(chemistry_df.BindingDB_potent_count, errors='coerce')), median=3.13)
+        chemistry_df['bindingDB_phase2'] = norm_min_max(np.log(pd.to_numeric(chemistry_df.BindingDB_potent_phase2_count, errors='coerce')), df_max=4.7)
+        chemistry_df['chembl_potent'] = norm_min_max(np.log(pd.to_numeric(chemistry_df.ChEMBL_bioactives_potent_count, errors='coerce')), df_max=8)
+        chemistry_df['chembl_potent_log'] = norm_min_median(np.log(pd.to_numeric(chemistry_df.ChEMBL_bioactives_potent_count, errors='coerce')),
                                                             median=2.64)
         chemistry_df['chembl_selective_M'] = norm_min_max(
-            np.log(chemistry_df.ChEMBL_bioactives_moderate_selectivity_count), df_max=7)
-        chemistry_df['chembl_selective_G'] = norm_min_max(np.log(chemistry_df.ChEMBL_bioactives_good_selectivity_count),
+            np.log(pd.to_numeric(chemistry_df.ChEMBL_bioactives_moderate_selectivity_count, errors='coerce')), df_max=7)
+        chemistry_df['chembl_selective_G'] = norm_min_max(np.log(pd.to_numeric(chemistry_df.ChEMBL_bioactives_good_selectivity_count, errors='coerce')),
                                                           df_max=7)
         chemistry_df['chembl_selective_E'] = norm_min_max(
-            np.log(chemistry_df.ChEMBL_bioactives_great_selectivity_count), df_max=7)
-        chemistry_df['commercial_potent'] = norm_min_max(np.log(chemistry_df.commercial_potent_total), df_max=5)
+            np.log(pd.to_numeric(chemistry_df.ChEMBL_bioactives_great_selectivity_count, errors='coerce')), df_max=7)
+        chemistry_df['commercial_potent'] = norm_min_max(np.log(pd.to_numeric(chemistry_df.commercial_potent_total, errors='coerce')), df_max=5)
 
         chemistry_df['chemistry_score'] = chemistry_df[['chembl_potent_log', 'bindingDB_potent_log']].mean(axis=1)
         chemistry_df['chemistry_qual_score'] = np.where(chemistry_df.BindingDB_potent_phase2_count > 0, 1,
@@ -221,9 +222,9 @@ class target_scores:
         col_genetic = ['Target_id', 'gwas_count', 'gwas_sig', 'OT_MAX_VAL_genetic_association',
                        'OT_NUM_MAX_genetic_association', 'OT_TOP10_avg_score']
         genetic_df = self.data[col_genetic].copy()
-        genetic_df['genetic_NORM'] = norm_min_max(np.log2(genetic_df.OT_NUM_MAX_genetic_association.replace(0, 0.0001)),
-                                                  df_max=5)
-        genetic_df['gen_GScore'] = norm_min_max(np.log10(genetic_df.gwas_count * 10), df_min=0, df_max=2)
+        genetic_df['genetic_NORM'] = norm_min_max(np.log2(pd.to_numeric(genetic_df.OT_NUM_MAX_genetic_association.replace(0, 0.0001), errors='coerce')),
+                                                   df_max=5)
+        genetic_df['gen_GScore'] = norm_min_max(np.log10(pd.to_numeric(genetic_df.gwas_count * 10, errors='coerce')), df_min=0, df_max=2)
         genetic_df['gen_GQualScore'] = genetic_df.gwas_sig / genetic_df.gwas_count
         genetic_df['gen_AScore'] = genetic_df.OT_MAX_VAL_genetic_association * genetic_df.genetic_NORM
         genetic_df['gen_AQualScore'] = genetic_df.OT_TOP10_avg_score
@@ -240,7 +241,7 @@ class target_scores:
     def get_info_score(self):
         col_info = ['Target_id', 'JensenLab PubMed Score']
         info_df = self.data[col_info].copy()
-        info_df['information_score'] = norm_min_max(np.log(info_df['JensenLab PubMed Score'].replace(0, 0.00001)),
+        info_df['information_score'] = norm_min_max(np.log(pd.to_numeric(info_df['JensenLab PubMed Score'].replace(0, 0.00001), errors='coerce')),
                                                     df_max=12)
 
         self.scores = self.scores.merge(info_df[['Target_id', 'information_score']], on='Target_id', how='left')
@@ -265,7 +266,7 @@ class target_scores:
                                                     axis=1),
                                                 np.nan, 0))
         safety_df['safety_qual'] = safety_df[['safe_GScore', 'safe_EScore']].mean(axis=1)
-        safety_df['n_genotypes'] = norm_min_max(np.log(safety_df.number_of_genotypes), df_max=6)
+        safety_df['n_genotypes'] = norm_min_max(np.log(pd.to_numeric(safety_df.number_of_genotypes, errors='coerce')), df_max=6)
         safety_df['safety_score'] = (safety_df.n_genotypes + np.where(self.data.Brain.isna(), 0, 0.3)).clip(0, 1)
         safety_score_component = safety_df[
             ['Target_id', 'safe_GScore', 'safe_EScore','n_genotypes', 'Heart_alert', 'Liver_alert', 'Kidney_alert']].copy()
@@ -593,7 +594,6 @@ def get_descriptors_list(target_id, targetdb=None):
                     'opentargets': """SELECT * FROM opentarget_association WHERE target_id in ('%s')""" % target_id}
 
     results = {qname: pd.read_sql(query, con=connector_targetDB) for qname, query in list_queries.items()}
-
     # ================================================================================================================#
     # ========================================= GENERAL INFO =========================================================#
     # ================================================================================================================#
@@ -627,7 +627,7 @@ def get_descriptors_list(target_id, targetdb=None):
         OT = pd.DataFrame(
             columns=["Target_id", "OT_number_of_associations", "OT_list_max_diseases", "OT_TOP10_diseases",
                      "OT_max_association_score", "OT_%_genetic_association", "OT_%_known_drug",
-                     "OT_%_litterature_mining",
+                     "OT_%_litterature_mining", 'OT_TOP10_avg_score',
                      "OT_%_animal_model", "OT_%_affected_pathway", "OT_%_rna_expression", "OT_%_somatic_mutation",
                      "OT_MAX_VAL_genetic_association", "OT_NUM_MAX_genetic_association", "OT_MAX_VAL_known_drug",
                      "OT_NUM_MAX_known_drug", "OT_MAX_VAL_litterature_mining", "OT_NUM_MAX_litterature_mining",
@@ -725,7 +725,7 @@ def get_descriptors_list(target_id, targetdb=None):
     # ================================================================================================================#
 
     if not results['pockets'].empty:
-        data = data.merge(results['pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index().round(2),
+        data = data.merge(results['pockets'].groupby('Target_id').mean(numeric_only = True).add_prefix('mean_').reset_index().round(2),
                           on='Target_id',
                           how='left')
         data = data.merge(results['pockets'].groupby('Target_id')['druggability_score'].std().reset_index().rename(
@@ -742,7 +742,7 @@ def get_descriptors_list(target_id, targetdb=None):
         data = data.merge(pocket, on="Target_id", how='left')
 
     if not results['alt_pockets'].empty:
-        data = data.merge(results['alt_pockets'].groupby('Target_id').mean().add_prefix('mean_').reset_index().round(2),
+        data = data.merge(results['alt_pockets'].groupby('Target_id').mean(numeric_only = True).add_prefix('mean_').reset_index().round(2),
                           on='Target_id',
                           how='left')
         data = data.merge(
@@ -796,7 +796,7 @@ def get_descriptors_list(target_id, targetdb=None):
     if not results['tissue_expression'].empty:
         cell_values = results['tissue_expression'].groupby(['Target_id', 'organ', 'tissue']).max()
         cell_values.value = cell_values.value.replace(0, np.nan)
-        tissue_grouped = cell_values.groupby(['Target_id', 'organ']).mean().round(1).reset_index().fillna(0)
+        tissue_grouped = cell_values.groupby(['Target_id', 'organ']).mean(numeric_only = True).round(1).reset_index().fillna(0)
         tissue = tissue_grouped.pivot(index='Target_id', columns='organ', values='value').reset_index()
         tissue_avg = tissue_grouped.groupby('Target_id')['value'].agg(['mean', 'std']).rename(
             columns={'mean': 'EXP_LVL_AVG', 'std': 'EXP_LVL_STDDEV'}).reset_index()
@@ -835,16 +835,15 @@ def get_descriptors_list(target_id, targetdb=None):
             columns={'organ': 'tissue_max_expression', 'value': 'expression_max_tissue'})
     else:
         tissue = pd.DataFrame(
-            columns=['Target_id','Brain', 'Adipose & soft tissue',
+            columns=['Target_id','Brain', 'Connective & soft tissue',
                  'Bone marrow & lymphoid tissues', 'Endocrine tissues',
                  'Female tissues', 'Gastrointestinal tract', 'Kidney & urinary bladder',
-                 'Liver & gallbladder', 'Lung', 'Male tissues', 'Muscle tissues',
+                 'Liver & gallbladder', 'Respiratory system', 'Male tissues', 'Muscle tissues',
                  'Pancreas', 'Proximal digestive tract', 'Skin'])
         tissue_avg = pd.DataFrame(columns=['Target_id', 'EXP_LVL_AVG', 'EXP_LVL_STDDEV', 'Heart_alert',
                                            'Heart_value', 'Liver_alert', 'Liver_value', 'Kidney_alert',
                                            'Kidney_value'])
         tissue_max = pd.DataFrame(columns=['tissue_max_expression', 'expression_max_tissue', 'Target_id'])
-
     data = data.merge(tissue, on='Target_id', how='left')
     data = data.merge(results['selectivity'].round(2).rename(columns={'Selectivity_entropy': 'Expression_Selectivity'}),
                       on='Target_id', how='left')
@@ -952,7 +951,7 @@ def get_descriptors_list(target_id, targetdb=None):
         total_moderate_selectivity = pd.DataFrame({'Target_id': [], 'ChEMBL_bioactives_moderate_selectivity_count': []})
         total_good_selectivity = pd.DataFrame({'Target_id': [], 'ChEMBL_bioactives_good_selectivity_count': []})
         total_great_selectivity = pd.DataFrame({'Target_id': [], 'ChEMBL_bioactives_great_selectivity_count': []})
-
+    
     data = data.merge(total_bioact, on='Target_id', how='left')
     data = data.merge(total_potent, on='Target_id', how='left')
     data = data.merge(total_moderate_selectivity, on='Target_id', how='left')
@@ -1042,7 +1041,6 @@ def get_descriptors_list(target_id, targetdb=None):
                                                               n_residues / general_data.loc[tid].length)
     pdb_range = pdb_range.drop(['start_stop', 'n_length'], axis=1)
     pdb_range.reset_index(drop=True, inplace=True)
-
     data = data.merge(pdb_range, on='Target_id', how='left')
     data = data.merge(total_pdb, on='Target_id', how='left')
     data = data.merge(pdb_w_lig, on='Target_id', how='left')
@@ -1091,7 +1089,6 @@ def get_descriptors_list(target_id, targetdb=None):
     ORDER BY score DESC""" % tcrd_id_list,
                     'novelty': """SELECT score,protein_id as tcrd_id FROM tcrd_novelty WHERE protein_id in ('%s')""" % tcrd_id_list}
     tcrd_res = {qname: pd.read_sql(query, con=connector_targetDB) for qname, query in tcrd_queries.items()}
-
     tcrd_data = tcrd_id.copy()
 
     tcrd_data = tcrd_data.merge(tcrd_res['target'], on='tcrd_id', how='left')

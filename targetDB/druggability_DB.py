@@ -8,6 +8,7 @@ import time
 import sqlite3
 import urllib.request as urllib
 import requests
+import re
 import json
 from urllib.error import *
 
@@ -17,18 +18,18 @@ from Bio import SwissProt
 from Bio import pairwise2
 from Bio.Blast import NCBIXML
 from Bio.Seq import Seq
-from Bio.SubsMat.MatrixInfo import blosum62
+from Bio.Align import substitution_matrices
 from intermine.webservice import Service
 from pathlib import Path
 
-from targetDB import drugg_errors
-from targetDB.protein_atlas_api import proteinatlas as patlas
-from targetDB.utils import config as cf, pocket_finder as pocket
-from targetDB.utils import pdb_parser
-from targetDB.utils import retryers as ret
-from targetDB.utils import gene2id as g2id
-from targetDB.utils import targetDB_init as tinit
-from targetDB.utils import uniprot_parse
+import drugg_errors
+from protein_atlas_api import proteinatlas as patlas
+from utils import config as cf, pocket_finder as pocket
+from utils import pdb_parser
+from utils import retryers as ret
+from utils import gene2id as g2id
+from utils import targetDB_init as tinit
+from utils import uniprot_parse
 
 
 def get_list_entries(target_db_path=None):
@@ -261,6 +262,12 @@ def get_domains(record=None, gene_id=None, chembl_id=None):
 				start = str(start)[1:]
 			while not str(finish)[0].isdigit():
 				finish = str(finish)[1:]
+			if start == finish:
+				regex = r'(\d+|\D+)'
+				l = re.split(regex, start)
+				l = [x for x in l if x.isdigit()]
+				start = l[0]
+				finish = l[1]
 			domain_name = str(feature[3]).split('(')[0].rstrip()
 			domain_id = str(gid) + str(start) + str(finish) + '_uniprot'
 			domain.append(
@@ -465,6 +472,7 @@ def get_variants(record, domains):
 
 
 def align(sequence1, sequence2, end_gaps=True, print_align=False):
+	blosum62 = substitution_matrices.load("BLOSUM62")
 	if sequence1 == 'no_sequence' or sequence2 == 'no_sequence' or sequence1 == '' or sequence2 == '':
 		return None
 
@@ -563,6 +571,7 @@ def get_ligands_to_do(chembl_code):
 	connector.close()
 	if res_lig_target.empty:
 		return lig_to_do
+	
 
 	count = 0
 	limit = 500
@@ -584,17 +593,16 @@ def get_ligands_to_do(chembl_code):
 			lig_ids = '('
 			count = 0
 			n_loop += 1
-			res_lig_in_db = res_lig_in_db.append(tmp_res)
+			res_lig_in_db = pd.concat([res_lig_in_db, tmp_res])
 	if excess != 0:
 		lig_ids = lig_ids.rstrip(',') + ')'
 		full_query = query_lig_bioact_db_base + lig_ids
 		tmp_res = pd.read_sql(full_query, con=connector2)
-		res_lig_in_db = res_lig_in_db.append(tmp_res)
+		res_lig_in_db = pd.concat([res_lig_in_db, tmp_res])
 	res_lig_in_db.index = res_lig_in_db.lig_id
 	connector2.close()
 
 	# =========# ADDING IN THE TO-DO LIST ONLY LIGAND WITH NO BIOACTIVITY IN THE DB #========================#
-
 	for i in res_lig_target.index:
 		if res_lig_target.loc[i]['lig_id'] in res_lig_in_db.index:
 			rhs=str(res_lig_in_db.loc[res_lig_target.loc[i]['lig_id']].chembl_version)
@@ -693,7 +701,6 @@ def get_ligands_info():
 	  ,version"""
 	df = pd.read_sql(sql_lig, con=connector)
 	connector.close()
-
 	rename = {'cx_logd':'acd_logd', 'cx_logp':'acd_logp', 'cx_most_bpka':'acd_most_bpka', 'cx_most_apka':'acd_most_apka'}
 	df.rename(columns=rename, inplace=True)
 
@@ -745,7 +752,7 @@ def get_bioactivity(lig_to_do):
 		if counter == 1000:
 			lig_str = lig_str.rstrip(',')
 			query_bioactivity = query % lig_str
-			res_bioactivity = res_bioactivity.append(pd.read_sql(query_bioactivity, con=connector))
+			res_bioactivity = pd.concat([res_bioactivity, pd.read_sql(query_bioactivity, con=connector)])
 			counter = 0
 			lig_str = ''
 	if counter == 0:
@@ -753,7 +760,7 @@ def get_bioactivity(lig_to_do):
 	elif counter < 1000:
 		lig_str = lig_str.rstrip(',')
 		query_bioactivity = query % lig_str
-		res_bioactivity = res_bioactivity.append(pd.read_sql(query_bioactivity, con=connector))
+		res_bioactivity = pd.concat([res_bioactivity, pd.read_sql(query_bioactivity, con=connector)])
 
 	connector.close()
 	return res_bioactivity
@@ -816,17 +823,21 @@ def pdb_blast(sequence, path, gene_id, gene='', pdb_list=None):
 	e_value_treshold = 0.0001
 	query_length = float(blast_record.query_length)
 	for alignment in blast_record.alignments:
-		pdb_code = alignment.hit_def.split(' ')[0].split('_')[0]
+		pdb_code = alignment.hit_id.split('|')[1]
 		if pdb_code in pdb_list:
 			continue
-		chain_id = alignment.hit_def.split(' ')[0]
+		chain_id = alignment.accession
 		for hsp in alignment.hsps:
 			length = float(hsp.align_length)
 			percent_seq = round((length / query_length) * 100, 1)
 			similarity = round((float(hsp.positives) / length) * 100, 1)
 			if hsp.score > 200 and hsp.expect < e_value_treshold and similarity > 60:
 				data = {'PDB_code': pdb_code, 'seq_percent': percent_seq,'similarity': similarity,'Chain_id': chain_id, 'chain_letter': chain_id.split('_')[1], 'gene': '','organism': '', 'uniprot_id': '', 'path': ''}
-				alternate_pdb = alternate_pdb.append(data,ignore_index=True)
+				try:
+					data = pd.DataFrame(data)
+				except ValueError:
+					data = pd.DataFrame(data, index=[0])
+				alternate_pdb = pd.concat([alternate_pdb, data], ignore_index = True)
 	alternate_pdb.drop_duplicates(subset=['PDB_code', 'Chain_id'], inplace=True)
 	get_pdb(alternate_pdb, path)
 	for id in alternate_pdb.index:
@@ -917,8 +928,9 @@ def proteins_blast(sequence, gene_id, gene, path):
 		for hsp in alignment.hsps:
 			length = float(hsp.align_length)
 			neighbour_accession_code = alignment.accession
-			neighbour_gene_name = alignment.title.split('|')[-1].split('_')[0]
-			neighbour_gene_species = alignment.title.split('|')[-1].split('_')[1].split(' ')[0]
+			idx_name = [idx for idx, s in enumerate(alignment.hit_def.split(':')) if 'Full' in s][0]
+			neighbour_gene_name = alignment.hit_def.split(':')[idx_name].split("=")[1].split(';')[0]
+			neighbour_gene_species = alignment.hit_def.split('[')[1].split(']')[0]
 			if neighbour_accession_code in list_of_accession_ID:
 				continue
 			else:
@@ -1078,7 +1090,7 @@ def open_target_association(ensembl_id):
 
 	try:
 		# Perform POST request and check status code of response
-		r = requests.post(base_url, json={"query": query_string, "variables":{}})
+		r = requests.post(base_url, json={"query": query_string, "variables":{}}, timeout = 20)
 		if r.status_code!=200:
 			print("[OPENTARGETS]: Couldn't get results from Open Targets API")
 			pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'literature',
@@ -1093,9 +1105,13 @@ def open_target_association(ensembl_id):
 							  'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
 							  'gene_symbol'])
 
+	if api_response_as_json['data']['target'] is None:
+		data = pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'litterature_mining',
+							   'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+							  'gene_symbol'])
+		return(data)
 	# Extract the assodiated diseases info for this target
 	ad=pd.DataFrame.from_dict(api_response_as_json['data']['target']['associatedDiseases'])
-
 	# Extract the approved gene symbol for this target
 	gene_symbol=pd.DataFrame.from_dict(api_response_as_json['data']['target'])['approvedSymbol'][1]
 
@@ -1125,8 +1141,17 @@ def open_target_association(ensembl_id):
 			data[score['id']] = score['score']
 
 		# Append the result to the data frame
-		df=df.append(data, ignore_index=True)
+		try:
+			data = pd.DataFrame(data)
+		except ValueError:
+			data = pd.DataFrame(data, index=[0])
+		df = pd.concat([df, data], ignore_index = True)
 
+	if df.empty:
+		data = pd.DataFrame(columns=['affected_pathway', 'animal_model', 'genetic_association', 'known_drug', 'litterature_mining',
+							   'rna_expression', 'somatic_mutation', 'overall_score', 'disease_name', 'disease_area',
+							  'gene_symbol'])
+		return(data)
 	df = df.round(2)
 	df = df[df['overall_score'] > 0.05]
 	rename = {'literature': 'litterature_mining'}
@@ -1183,8 +1208,10 @@ def write_to_db(target, db_path):
 
 	# ========# FILLING THE MODIFICATIONS TABLE #=========#
 
+	column_headers = list(target.modifications.columns.values)
 	target.modifications['Target_id'] = target.swissprotID
 	target.modifications['Unique_modID'] = target.swissprotID + '_' + target.modifications.mod_id
+	target.modifications['domains'] = [','.join(map(str, l)) for l in target.modifications['domains']]
 	target.modifications.to_sql('modifications', con=connector, index=False, if_exists='append')
 
 	# ========# FILLING THE ISOFORMS + ISOFORMS MODIFICATIONS TABLES #=========#
@@ -1409,40 +1436,25 @@ class Target:
 				break
 
 			# ===========# GET ALL THE CROSSREFERENCES (source: Uniprot)#==============#
-
 			self.pdb, self.go, self.chembl_id = get_crossref_pdb_go_chembl(self.record)
-
 			# ===========# GET PROTEIN EXPRESSION LEVELS (source: ProteinAtlas)#==============#
-
 			self.protein_expression = patlas.ProteinExpression(self.gene, id=self.ensembl_id)
 			if self.protein_expression.protein_lvl is None:
 				self.protein_expression = None
-
 			# ===========# GET INFO FROM HUMANMINE.ORG (disease, phenotypes, differential_exp_diseases,
 			# differential_exp_tissues, gwas,pathways) #=============#
-
 			self.disease, self.phenotypes, self.differential_exp_disease, self.differential_exp_tissues, self.gwas, self.pathways = get_humanmine_data(
 				self.gene)
-
 			# ==========# GET DOMAIN INFORMATION FROM BOTH CHEMBL AND UNIPROT #===========#
-
 			self.domain = get_domains(record=self.record,gene_id=self.swissprotID, chembl_id=self.chembl_id)
-
 			# ==========# GET DISEASE ASSOCIATION (Source: OpenTargets)#===========#
-
 			self.open_targets = open_target_association(self.ensembl_id)
-
 			# ==========# GET SEQUENCE INFORMATION (Source: Uniprot)#===========#
-
 			self.sequence = self.record.sequence
 			self.seq_list = list(self.sequence)
-
 			# ==========# GET ISOFORMS INFORMATION (Source: Uniprot) #===========#
-
 			self.isoforms, self.modifications = get_variants(self.record, self.domain)
-
 			# ==========# GET PROTEIN CLASS AND SYNONYMS FROM CHEMBL #===========#
-
 			self.prot_info = get_chembl_info(self.chembl_id)
 			if self.prot_info.empty:
 				self.prot_info.loc[0] = [None, None, None, synonyms(self.record)]
@@ -1460,7 +1472,6 @@ class Target:
 			self.prot_info['Function'] = self.go.loc['F'].value
 			self.prot_info['Number_isoforms'] = len(self.isoforms)
 			self.prot_info['chembl_id'] = self.chembl_id
-
 			# ============================================================================#
 			# ======================# END OF THE INFO SECTION #===========================#
 			# ============================================================================#
@@ -1468,9 +1479,7 @@ class Target:
 			# ============================================================================#
 			# ======================# START OF THE PDB SECTION #==========================#
 			# ============================================================================#
-
 			# ======# RETRIEVING LIST OF PDB ASSOCIATED TO TARGET ALREADY IN DB #=========#
-
 			connector = sqlite3.connect(targetDB)
 			query_pdb = "SELECT PDB_code FROM PDB_Chains WHERE Target_id ='%s' GROUP BY PDB_code" % self.swissprotID
 			query_pockets = "SELECT Pocket_id FROM fPockets WHERE Target_id ='%s' AND druggable='TRUE' AND blast='FALSE'" % self.swissprotID
@@ -1479,26 +1488,21 @@ class Target:
 			connector.close()
 
 			# =============# REMOVING PDB CODE FROM CrossRef if already done #============#
-
 			self.pdb.drop(res_pdb.PDB_code, inplace=True)
 
 			if not self.pdb.empty:
 				# ========================# DOWNLOADING THE PDBs #============================#
-
 				get_pdb(self.pdb, self.path)
 
 				# ========================# GET PDB SEQUENCE INFO #===========================#
-
 				self.pdb_info = get_pdb_seq_info(self.pdb, self.domain)
 
 				# =====================# GET POCKETS (source: fpockets) ======================#
-
 				self.pockets = pocket.get_pockets(self.path, sphere_size=3, pdb_info=self.pdb, domain=self.domain,
 				                                  uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 				self.druggable_pockets = self.pockets['pockets'][self.pockets['pockets'].druggable == 'TRUE'].copy()
 
 			pdb_super_list = list(res_pdb.PDB_code) + list(self.pdb.index)
-
 			# ============================================================================#
 			# ======================# END OF THE PDB SECTION #============================#
 			# ============================================================================#
@@ -1506,9 +1510,7 @@ class Target:
 			# ============================================================================#
 			# ====================# START OF THE LIGAND SECTION #=========================#
 			# ============================================================================#
-
 			# ==============# FILL THE ASSAY TABLE IF EMPTY #================#
-
 			connector = sqlite3.connect(targetDB)
 			if pd.read_sql("SELECT assay_id FROM assays", con=connector).empty:
 				if verbose:
@@ -1526,21 +1528,19 @@ class Target:
 
 			if self.chembl_id:
 				# ==============# GET LIST OF LIGAND TO ADD #================#
-
 				ligands_to_do = get_ligands_to_do(self.chembl_id)
 
 				if len(ligands_to_do) != 0:
 					# ========# GET ALL BIOACTIVITIES OF THESE LIGANDS #=========#
+					print("[INFO]: Getting all bioactivities of ligands")
 					self.bioactivities = get_bioactivity(ligands_to_do)
 
 			# ============================================================================#
 			# =====================# END OF THE LIGAND SECTION #==========================#
 			# ============================================================================#
-
 			# ============================================================================#
 			# ====================# START OF THE BLAST SECTION #==========================#
 			# ============================================================================#
-
 			self.alternate_pdb = pdb_blast(self.sequence, self.path, self.swissprotID, pdb_list=pdb_super_list,
 			                               gene=self.gene)
 			very_close_pdb = self.alternate_pdb[self.alternate_pdb.similarity >= 90.0].copy()
@@ -1556,7 +1556,6 @@ class Target:
 					                                            uniprot_id=self.swissprotID, fpocket_exe=fpocket_exe,verbose=verbose)
 
 			self.neighbours = proteins_blast(self.sequence, self.swissprotID, self.gene, self.path)
-
 			# ============================================================================#
 			# ====================# END OF THE BLAST SECTION #============================#
 			# ============================================================================#
@@ -1602,6 +1601,7 @@ def parse_args():
 		print('[ERROR]: Please use one of the optional input options : -g / -i / -l / -a')
 		parser.print_help()
 		sys.exit()
+	print(arguments)
 	return arguments
 
 
@@ -1643,6 +1643,7 @@ def main():
 				# =============================# PATH TO SQLITE DB #============================#
 
 				targetDB = config['database_path']['targetdb']
+				print('db path: ', targetDB)
 				chembl_24 = config['database_path']['chembl']
 				pubmed_email = config['pubmed_email']['email']
 				dbase_file_path = config['output_path']['db_files']
@@ -1683,7 +1684,7 @@ def main():
 			gene_df,missing = g2id.gene_to_id(list_of_genes, targetDB_path=targetDB)
 			break
 		elif args.do_all:
-			gene_df,missing = g2id.gene_to_id_all(targetDB_path=targetDB)
+			gene_df = g2id.gene_to_id_all(targetDB_path=targetDB)
 			break
 
 	for g_id in gene_df.index:
