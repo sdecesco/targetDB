@@ -7,21 +7,32 @@ TargetDB is a tool to quickly query multiple publicly available databases and pr
 
 Installation
 ------------
-### Python package installation
-#### Pip installation (Preferred way)
+#### Virutal Environment Set-up
+
+We recommend running the TargetDB scripts in a virtual environment to self-contain the application and to avoid interference with packages and libraries already installed on your system.
+
+1) Dowload source code
 
 ```
-pip install targetDB
+git clone https://github.com/sdecesco/targetDB.git
 ```
-
-<span style="color:red">*Installation will fail due to opentargets dependency - 08/11/2021* (a fix will be needed and/or an opentarget-free version released) </span>
-
-#### Conda installation
+2) Navigate to the targetDB directory and set up virtual environment
 
 ```
-conda create --name targetdb --channel bioconda targetdb
-conda activate targetdb
-target_DB --help
+cd targetDB
+virtualenv venv
+```
+3) Activate the virtual environment and install package dependencies
+
+```
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+4) Run the druggability_report.py script to activate the GUI and use the TargetDB tool
+
+```
+python targetDB/druggability_report.py
 ```
 
 ##### Python compatibility
@@ -39,7 +50,11 @@ This package relies on the use of sqlite database to properly function.
 
 + targetDB
 
-You can download a copy of the database [HERE](https://github.com/sdecesco/targetDB/releases/download/v1.3.1/TargetDB_20_12_19.db.zip)
+You can download a copy of the old database [HERE](https://github.com/sdecesco/targetDB/releases/download/v1.3.1/TargetDB_20_12_19.db.zip)
+
+A more recent version of the database has been created which can be downloaded [HERE](https://zenodo.org/communities/targetdb)
+
+<span style="color:red">*We recommend using the most recent database for the most up-to-date results*</span>
 
 >This database contains all of the human genome genes that have a uniprot ID
 
