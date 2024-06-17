@@ -24,6 +24,6 @@ scipy==1.11.4
 six==1.16.0
 threadpoolctl==3.2.0
 tzdata==2023.4
-urllib3==2.1.0
+urllib3==2.2.2
 XlsxWriter==3.1.9
 xmltodict==0.13.0
